@@ -3,7 +3,7 @@
 # Usage: bash xtask.sh <command>
 #
 # Commands:
-#   check   - Full verification: fmt, clippy, test, doc
+#   check   - Full verification: fmt, clippy, test, doc, wasm
 #   test    - Run all workspace tests
 #   clippy  - Lint all crates
 #   fmt     - Format check (no writes)
@@ -74,6 +74,7 @@ cmd_check() {
     cmd_clippy
     cmd_test
     cmd_doc
+    cmd_wasm
     echo -e "${GREEN}==> All checks passed.${NC}"
 }
 

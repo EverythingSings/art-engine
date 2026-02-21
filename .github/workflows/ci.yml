@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5        # v4.3.1
+
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7  # stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5      # v2.8.2
+
+      - name: Format
+        run: bash xtask.sh fmt
+
+      - name: Clippy
+        run: bash xtask.sh clippy
+
+      - name: Test
+        run: bash xtask.sh test
+
+      - name: Doc
+        run: bash xtask.sh doc
+
+      - name: WASM
+        run: bash xtask.sh wasm

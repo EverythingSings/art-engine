@@ -13,7 +13,7 @@ Generative art engine in Rust, compiled to WASM for browser and native for serve
 Use `xtask.sh` (or `make` if available) for all standard workflows:
 
 ```bash
-bash xtask.sh check                                   # Full verification: fmt, clippy, test, doc
+bash xtask.sh check                                   # Full verification: fmt, clippy, test, doc, wasm
 bash xtask.sh test                                     # Run all workspace tests
 bash xtask.sh test art-engine-core                     # Run tests for a single crate
 bash xtask.sh clippy                                   # Lint all crates
@@ -36,6 +36,12 @@ cargo fmt --all                                       # Format
 cargo run -p art-engine-cli --                        # Run CLI binary
 wasm-pack build crates/wasm --target web              # Build WASM package for browser
 ```
+
+## CI
+
+GitHub Actions runs on every push and PR to `master` (`.github/workflows/ci.yml`). The pipeline calls `xtask.sh` subcommands — `bash xtask.sh check` locally is the same verification CI runs. Steps: format, clippy, test, doc, WASM build.
+
+Actions are pinned to SHA digests. Update SHAs deliberately, not via floating tags.
 
 ## Development Standards
 
