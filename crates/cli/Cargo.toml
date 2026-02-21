@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI binary for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

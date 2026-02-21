@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-attractor"
+version = "0.1.0"
+edition = "2021"
+description = "Strange attractor (Lorenz, Henon, etc.) engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

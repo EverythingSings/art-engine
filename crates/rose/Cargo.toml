@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-rose"
+version = "0.1.0"
+edition = "2021"
+description = "Rose/parametric curve pattern engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

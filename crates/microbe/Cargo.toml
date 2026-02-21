@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-microbe"
+version = "0.1.0"
+edition = "2021"
+description = "Organism/cell simulation engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

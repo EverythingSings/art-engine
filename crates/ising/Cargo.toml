@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-ising"
+version = "0.1.0"
+edition = "2021"
+description = "Ising model (statistical mechanics) engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

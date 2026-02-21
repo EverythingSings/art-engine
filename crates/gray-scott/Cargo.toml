@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-gray-scott"
+version = "0.1.0"
+edition = "2021"
+description = "Gray-Scott reaction-diffusion engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

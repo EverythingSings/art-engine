@@ -6,9 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Generative art engine in Rust, compiled to WASM for browser and native for server. Renders via WebGL2 with a composable layer/shader/post-processing pipeline. Exposes a CLI command interface. Two-agent system (Operator + Critic) can drive the CLI autonomously. Full architecture vision in `ARCHITECTURE.md`.
 
-**Current state:** Greenfield. `ARCHITECTURE.md` is the design spec. No code written yet.
+**Current state:** Phase 1 foundation in progress. Core workspace scaffolded with 11 crates. Engine trait, Field, and WebGL2 render module implemented.
 
 ## Build Commands
+
+Use `xtask.sh` (or `make` if available) for all standard workflows:
+
+```bash
+bash xtask.sh check                                   # Full verification: fmt, clippy, test, doc
+bash xtask.sh test                                     # Run all workspace tests
+bash xtask.sh test art-engine-core                     # Run tests for a single crate
+bash xtask.sh clippy                                   # Lint all crates
+bash xtask.sh fmt                                      # Format check (no writes)
+bash xtask.sh doc                                      # Build docs
+bash xtask.sh build                                    # Build all crates (native)
+bash xtask.sh wasm                                     # Build WASM target
+```
+
+Raw cargo commands (for reference / one-off use):
 
 ```bash
 cargo build                                          # Build all crates
@@ -300,6 +315,10 @@ art-engine/
 - **`Palette`**: OKLab/OKLCh color space for perceptually uniform gradients. Curated built-ins (ocean, neon, earth, vapor, etc.).
 - **`Xorshift64`**: Deterministic PRNG. Same seed = reproducible art.
 - **`Seed`**: Serializable struct (engine + dimensions + params + seed + steps) for reproducible specifications.
+
+### Build Infrastructure Over Ad-Hoc Scripts
+
+Never run one-off verification commands (e.g., `cargo test && cargo clippy && cargo fmt --check`) inline. Instead, build reusable infrastructure — Makefiles, shell scripts, CI configs — and invoke those. Verification should be a single repeatable command, not a chain pasted into the terminal.
 
 ### Code Conventions
 

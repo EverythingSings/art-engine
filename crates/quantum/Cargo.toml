@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-quantum"
+version = "0.1.0"
+edition = "2021"
+description = "2D quantum walk engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

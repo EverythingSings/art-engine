@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-dla"
+version = "0.1.0"
+edition = "2021"
+description = "Diffusion-limited aggregation engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }

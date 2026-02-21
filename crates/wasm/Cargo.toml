@@ -1,0 +1,13 @@
+[package]
+name = "art-engine-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WASM bindings for the art-engine"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+art-engine-core = { path = "../core", features = ["render"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "WebGl2RenderingContext", "OffscreenCanvas"] }

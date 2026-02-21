@@ -1,0 +1,8 @@
+[package]
+name = "art-engine-physarum"
+version = "0.1.0"
+edition = "2021"
+description = "Physarum polycephalum slime mold engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }
