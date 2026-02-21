@@ -8,8 +8,13 @@
 //! ideal for generative art palette interpolation.
 
 use crate::error::EngineError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// sRGB color with components in [0, 1].
+///
+/// Serializes as a hex string `"#rrggbb"` for human-readable formats.
+/// The hex round-trip has 8-bit quantization (1/255 precision loss),
+/// which is acceptable since hex colors are inherently 8-bit.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Srgb {
     pub r: f64,
@@ -64,6 +69,29 @@ impl Srgb {
             g: g as f64 / 255.0,
             b: b as f64 / 255.0,
         })
+    }
+
+    /// Converts the color to a hex string like `"#rrggbb"`.
+    ///
+    /// Components are quantized to 8-bit (0–255) with rounding.
+    pub fn to_hex(self) -> String {
+        let r = (self.r.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let g = (self.g.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let b = (self.b.clamp(0.0, 1.0) * 255.0).round() as u8;
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
+}
+
+impl Serialize for Srgb {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for Srgb {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Srgb::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -554,6 +582,126 @@ mod tests {
         assert!(approx_eq(color.b, 0x20 as f64 / 255.0));
     }
 
+    // -- to_hex tests --
+
+    #[test]
+    fn to_hex_pure_red() {
+        let red = Srgb {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+        };
+        assert_eq!(red.to_hex(), "#ff0000");
+    }
+
+    #[test]
+    fn to_hex_pure_white() {
+        let white = Srgb {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+        };
+        assert_eq!(white.to_hex(), "#ffffff");
+    }
+
+    #[test]
+    fn to_hex_pure_black() {
+        let black = Srgb {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+        };
+        assert_eq!(black.to_hex(), "#000000");
+    }
+
+    #[test]
+    fn to_hex_known_color() {
+        let color = Srgb {
+            r: 0x80 as f64 / 255.0,
+            g: 0x40 as f64 / 255.0,
+            b: 0x20 as f64 / 255.0,
+        };
+        assert_eq!(color.to_hex(), "#804020");
+    }
+
+    #[test]
+    fn from_hex_to_hex_round_trip() {
+        let original = "#c0ffee";
+        let color = Srgb::from_hex(original).unwrap();
+        assert_eq!(color.to_hex(), original);
+    }
+
+    // -- Serde tests --
+
+    #[test]
+    fn srgb_serializes_as_hex_string() {
+        let red = Srgb {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+        };
+        let json = serde_json::to_string(&red).unwrap();
+        assert_eq!(json, "\"#ff0000\"");
+    }
+
+    #[test]
+    fn srgb_deserializes_from_hex_string() {
+        let json = "\"#00ff00\"";
+        let green: Srgb = serde_json::from_str(json).unwrap();
+        assert!(approx_eq(green.r, 0.0));
+        assert!(approx_eq(green.g, 1.0));
+        assert!(approx_eq(green.b, 0.0));
+    }
+
+    #[test]
+    fn srgb_json_round_trip() {
+        let original = Srgb {
+            r: 0x80 as f64 / 255.0,
+            g: 0x40 as f64 / 255.0,
+            b: 0x20 as f64 / 255.0,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: Srgb = serde_json::from_str(&json).unwrap();
+        // 8-bit quantization means exact match within 1/255
+        assert!((deserialized.r - original.r).abs() < 1.0 / 255.0 + 1e-10);
+        assert!((deserialized.g - original.g).abs() < 1.0 / 255.0 + 1e-10);
+        assert!((deserialized.b - original.b).abs() < 1.0 / 255.0 + 1e-10);
+    }
+
+    #[test]
+    fn srgb_deserialize_rejects_invalid_hex() {
+        let result: Result<Srgb, _> = serde_json::from_str("\"not-a-color\"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_hex_clamps_out_of_range() {
+        let color = Srgb {
+            r: 1.5,
+            g: -0.1,
+            b: 0.5,
+        };
+        let hex = color.to_hex();
+        assert_eq!(hex, "#ff0080");
+    }
+
+    #[test]
+    fn hex_round_trip_is_idempotent_after_first_quantization() {
+        let original = Srgb {
+            r: 0.123456,
+            g: 0.654321,
+            b: 0.999999,
+        };
+        // First quantization pass
+        let once = Srgb::from_hex(&original.to_hex()).unwrap();
+        // Second quantization pass
+        let twice = Srgb::from_hex(&once.to_hex()).unwrap();
+        // After the first quantization, further round-trips must be bit-identical
+        assert_eq!(once.r.to_bits(), twice.r.to_bits());
+        assert_eq!(once.g.to_bits(), twice.g.to_bits());
+        assert_eq!(once.b.to_bits(), twice.b.to_bits());
+    }
+
     // -- Property-based tests --
 
     mod proptests {
@@ -629,6 +777,30 @@ mod tests {
                 prop_assert!(
                     srgb.b >= 0.0 && srgb.b <= 1.0,
                     "b out of range: {}", srgb.b
+                );
+            }
+
+            #[test]
+            fn srgb_hex_round_trip_within_quantization(
+                r in srgb_component(),
+                g in srgb_component(),
+                b in srgb_component(),
+            ) {
+                let original = Srgb { r, g, b };
+                let round_tripped = Srgb::from_hex(&original.to_hex()).unwrap();
+                // Hex is 8-bit: max error is 0.5/255
+                let max_err = 0.5 / 255.0 + 1e-10;
+                prop_assert!(
+                    (round_tripped.r - original.r).abs() < max_err,
+                    "r: {} vs {}", round_tripped.r, original.r
+                );
+                prop_assert!(
+                    (round_tripped.g - original.g).abs() < max_err,
+                    "g: {} vs {}", round_tripped.g, original.g
+                );
+                prop_assert!(
+                    (round_tripped.b - original.b).abs() < max_err,
+                    "b: {} vs {}", round_tripped.b, original.b
                 );
             }
 
