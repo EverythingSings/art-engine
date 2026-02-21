@@ -46,6 +46,14 @@ pub enum EngineError {
     /// A palette could not be constructed from the given colors.
     #[error("invalid palette: {0}")]
     InvalidPalette(String),
+
+    /// A layer with the given name was not found in the canvas.
+    #[error("layer not found: {0}")]
+    LayerNotFound(String),
+
+    /// A layer with the given name already exists in the canvas.
+    #[error("duplicate layer name: {0}")]
+    DuplicateLayerName(String),
 }
 
 #[cfg(test)]
@@ -126,6 +134,26 @@ mod tests {
         let err = EngineError::InvalidPalette("empty".into());
         let msg = format!("{err}");
         assert!(msg.contains("empty"), "missing message in: {msg}");
+    }
+
+    #[test]
+    fn layer_not_found_includes_name() {
+        let err = EngineError::LayerNotFound("background".into());
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("background"),
+            "expected message containing 'background', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn duplicate_layer_name_includes_name() {
+        let err = EngineError::DuplicateLayerName("particles".into());
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("particles"),
+            "expected message containing 'particles', got: {msg}"
+        );
     }
 
     #[test]
