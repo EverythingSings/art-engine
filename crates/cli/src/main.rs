@@ -64,6 +64,11 @@ enum Command {
     List,
 }
 
+/// Maximum canvas dimension (width or height) in pixels.
+const MAX_DIMENSION: usize = 8192;
+/// Maximum simulation steps.
+const MAX_STEPS: usize = 1_000_000;
+
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::List => {
@@ -94,6 +99,22 @@ fn run(cli: Cli) -> Result<(), CliError> {
             output,
             params,
         } => {
+            if width == 0 || width > MAX_DIMENSION {
+                return Err(CliError::Input(format!(
+                    "width must be 1..={MAX_DIMENSION}, got {width}"
+                )));
+            }
+            if height == 0 || height > MAX_DIMENSION {
+                return Err(CliError::Input(format!(
+                    "height must be 1..={MAX_DIMENSION}, got {height}"
+                )));
+            }
+            if steps > MAX_STEPS {
+                return Err(CliError::Input(format!(
+                    "steps must be <={MAX_STEPS}, got {steps}"
+                )));
+            }
+
             let params: serde_json::Value = serde_json::from_str(&params)
                 .map_err(|e| CliError::Input(format!("invalid --params JSON: {e}")))?;
 
