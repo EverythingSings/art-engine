@@ -7,6 +7,9 @@
 use crate::color::{oklch_to_srgb, srgb_to_oklch, OkLch, Srgb};
 use crate::error::EngineError;
 
+/// All built-in palette names, kept in sync with `from_name`.
+const BUILTIN_PALETTE_NAMES: &[&str] = &["ocean", "neon", "earth", "monochrome", "vapor", "fire"];
+
 /// A palette of colors stored in OKLCh, sampled by interpolation.
 ///
 /// Colors are evenly spaced along the `t` parameter: `sample(0.0)` returns
@@ -220,6 +223,28 @@ impl Palette {
     pub fn fire() -> Self {
         Self::from_hex(&["#800000", "#cc0000", "#ff4500", "#ff8c00", "#ffd700"])
             .expect("fire palette hex values are valid")
+    }
+
+    // -- Registry --
+
+    /// Returns a slice of all built-in palette names.
+    pub fn list_names() -> &'static [&'static str] {
+        BUILTIN_PALETTE_NAMES
+    }
+
+    /// Constructs a built-in palette by name.
+    ///
+    /// Returns `EngineError::UnknownPalette` if the name is not recognized.
+    pub fn from_name(name: &str) -> Result<Self, EngineError> {
+        match name {
+            "ocean" => Ok(Self::ocean()),
+            "neon" => Ok(Self::neon()),
+            "earth" => Ok(Self::earth()),
+            "monochrome" => Ok(Self::monochrome()),
+            "vapor" => Ok(Self::vapor()),
+            "fire" => Ok(Self::fire()),
+            _ => Err(EngineError::UnknownPalette(name.to_string())),
+        }
     }
 }
 
@@ -604,6 +629,32 @@ mod tests {
         assert!(srgb.r >= 0.0 && srgb.r <= 1.0, "r out of range: {}", srgb.r);
         assert!(srgb.g >= 0.0 && srgb.g <= 1.0, "g out of range: {}", srgb.g);
         assert!(srgb.b >= 0.0 && srgb.b <= 1.0, "b out of range: {}", srgb.b);
+    }
+
+    // -- Registry tests --
+
+    #[test]
+    fn list_names_returns_expected_count() {
+        assert_eq!(Palette::list_names().len(), 6);
+    }
+
+    #[test]
+    fn from_name_succeeds_for_all_listed_names() {
+        for name in Palette::list_names() {
+            assert!(
+                Palette::from_name(name).is_ok(),
+                "from_name failed for listed palette: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_name_returns_error_for_unknown() {
+        let result = Palette::from_name("rainbow");
+        assert!(matches!(
+            result,
+            Err(EngineError::UnknownPalette(ref n)) if n == "rainbow"
+        ));
     }
 
     // -- Built-in palette tests --

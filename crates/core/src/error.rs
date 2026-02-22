@@ -54,6 +54,18 @@ pub enum EngineError {
     /// A layer with the given name already exists in the canvas.
     #[error("duplicate layer name: {0}")]
     DuplicateLayerName(String),
+
+    /// An engine name was not recognized.
+    #[error("unknown engine: {0}")]
+    UnknownEngine(String),
+
+    /// A palette name was not recognized.
+    #[error("unknown palette: {0}")]
+    UnknownPalette(String),
+
+    /// An I/O or external library error.
+    #[error("I/O error: {0}")]
+    Io(String),
 }
 
 #[cfg(test)]
@@ -153,6 +165,36 @@ mod tests {
         assert!(
             msg.contains("particles"),
             "expected message containing 'particles', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_engine_includes_name() {
+        let err = EngineError::UnknownEngine("foobar".into());
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("foobar"),
+            "expected message containing 'foobar', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_palette_includes_name() {
+        let err = EngineError::UnknownPalette("rainbow".into());
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("rainbow"),
+            "expected message containing 'rainbow', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn io_error_includes_message() {
+        let err = EngineError::Io("file not found".into());
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("file not found"),
+            "expected message containing 'file not found', got: {msg}"
         );
     }
 

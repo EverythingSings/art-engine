@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Generative art engine in Rust, compiled to WASM for browser and native for server. Renders via WebGL2 with a composable layer/shader/post-processing pipeline. Exposes a CLI command interface. Two-agent system (Operator + Critic) can drive the CLI autonomously. Full architecture vision in `ARCHITECTURE.md`.
 
-**Current state:** Phase 1 foundation in progress. Core workspace scaffolded with 11 crates. Engine trait, Field, Canvas/Layer data model, color types (Srgb/OKLab/OKLCh), Palette, and WebGL2 render module implemented.
+**Current state:** Phase 1 foundation in progress. Core workspace scaffolded with 12 crates. Engine trait, Field, Canvas/Layer data model, color types (Srgb/OKLab/OKLCh), Palette, WebGL2 render module, EngineKind dispatch, CPU snapshot (PNG), and CLI (render + list) implemented.
 
 ## Build Commands
 
@@ -33,7 +33,9 @@ cargo test -p art-engine-core                         # Run tests for a single c
 cargo test -p art-engine-core -- test_name            # Run a single test
 cargo clippy --all                                    # Lint
 cargo fmt --all                                       # Format
-cargo run -p art-engine-cli --                        # Run CLI binary
+cargo run -p art-engine-cli -- render gray-scott -o out.png  # Render Gray-Scott to PNG
+cargo run -p art-engine-cli -- list                    # List available engines
+cargo run -p art-engine-cli -- list --json             # List engines as JSON
 wasm-pack build crates/wasm --target web              # Build WASM package for browser
 ```
 
@@ -300,8 +302,9 @@ Non-NaN results are **bit-identical** across all compliant WASM runtimes (Chrome
 art-engine/
   crates/
     core/          # Engine trait, Field, Canvas, Layer, Palette (OKLab/OKLCh), PRNG (Xorshift64), Seed, params
+    engines/       # EngineKind dispatch registry, CPU snapshot (PNG rendering)
     wasm/          # WASM bindings (wasm-bindgen), Lab struct wrapping EngineKind
-    cli/           # CLI binary (clap): render, gif, info, list commands
+    cli/           # CLI binary (clap): render, list subcommands
     gray-scott/    # Gray-Scott reaction-diffusion
     physarum/      # Physarum polycephalum slime mold
     rose/          # Rose/parametric curve patterns
@@ -317,6 +320,7 @@ art-engine/
 ### Core Abstractions
 
 - **`Engine` trait** (object-safe): `step()`, `field()`, `params()`, `param_schema()`, `hue_field()`. Each engine crate implements this. `dyn Engine` enables runtime engine switching.
+- **`EngineKind`** (in `engines` crate): Enum wrapping all engine implementations. `from_name()` for string-based construction, `list_engines()` for discovery. Implements `Engine` by delegation.
 - **`Field`**: 2D scalar field, row-major `Vec<f64>` in [0,1], toroidal wrapping. Used for visualization, nutrients, trails, hue modulation.
 - **`Palette`**: OKLab/OKLCh color space for perceptually uniform gradients. Curated built-ins (ocean, neon, earth, vapor, etc.).
 - **`Xorshift64`**: Deterministic PRNG. Same seed = reproducible art.
