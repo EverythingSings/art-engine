@@ -21,7 +21,7 @@ pub fn param_usize(params: &Value, name: &str, default: usize) -> usize {
     params
         .get(name)
         .and_then(Value::as_u64)
-        .map(|v| v as usize)
+        .and_then(|v| usize::try_from(v).ok())
         .unwrap_or(default)
 }
 
@@ -113,6 +113,20 @@ mod tests {
     fn param_usize_returns_default_for_string_value() {
         let params = json!({"count": "many"});
         assert_eq!(param_usize(&params, "count", 8), 8);
+    }
+
+    #[test]
+    fn param_usize_returns_default_for_value_exceeding_usize_max() {
+        // On wasm32, usize::MAX is u32::MAX. A u64 value above that
+        // should fall back to the default rather than silently truncating.
+        let big: u64 = u32::MAX as u64 + 100;
+        let params = json!({"count": big});
+        // On 64-bit targets, big fits in usize fine.
+        // On 32-bit targets (wasm32), big exceeds usize::MAX => default.
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(param_usize(&params, "count", 7), 7);
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(param_usize(&params, "count", 7), big as usize);
     }
 
     // -- param_bool --
