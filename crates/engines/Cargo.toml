@@ -1,0 +1,19 @@
+[package]
+name = "art-engine-engines"
+version = "0.1.0"
+edition = "2021"
+description = "Engine registry and CPU snapshot for the art-engine"
+
+[features]
+default = ["png"]
+png = ["dep:image"]
+
+[dependencies]
+art-engine-core = { path = "../core" }
+art-engine-gray-scott = { path = "../gray-scott" }
+serde_json = "1"
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
