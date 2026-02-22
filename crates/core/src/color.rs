@@ -52,6 +52,11 @@ impl Srgb {
     /// Returns `EngineError::InvalidColor` if the input is not a valid 6-digit hex color.
     pub fn from_hex(hex: &str) -> Result<Srgb, EngineError> {
         let hex = hex.strip_prefix('#').unwrap_or(hex);
+        if !hex.is_ascii() {
+            return Err(EngineError::InvalidColor(
+                "hex color must contain only ASCII characters".to_string(),
+            ));
+        }
         if hex.len() != 6 {
             return Err(EngineError::InvalidColor(format!(
                 "expected 6 hex digits, got {}",
@@ -572,6 +577,19 @@ mod tests {
         assert!(Srgb::from_hex("#fff").is_err()); // too short
         assert!(Srgb::from_hex("").is_err());
         assert!(Srgb::from_hex("#ff00ff00").is_err()); // too long
+    }
+
+    #[test]
+    fn from_hex_rejects_non_ascii_input() {
+        // Multi-byte UTF-8 that happens to be 6 bytes total would panic
+        // on byte-offset slicing without the ASCII guard.
+        assert!(Srgb::from_hex("\u{00e9}\u{00e9}\u{00e9}").is_err()); // 6 bytes, 3 chars
+        assert!(Srgb::from_hex("\u{1f600}ab").is_err()); // emoji + ascii
+    }
+
+    #[test]
+    fn from_hex_rejects_non_ascii_with_hash() {
+        assert!(Srgb::from_hex("#\u{00e9}\u{00e9}\u{00e9}").is_err());
     }
 
     #[test]
