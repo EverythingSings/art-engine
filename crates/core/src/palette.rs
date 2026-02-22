@@ -191,38 +191,80 @@ impl Palette {
 
     /// Deep blues to cyan.
     pub fn ocean() -> Self {
-        Self::from_hex(&["#001f3f", "#003366", "#005f73", "#0a9396", "#94d2bd"])
-            .expect("ocean palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.23812082136511145, c: 0.07127959462771918, h: 252.01432913571119343 }, // #001f3f
+                OkLch { l: 0.32333781228455999, c: 0.10254380255141139, h: 253.88517968214827647 }, // #003366
+                OkLch { l: 0.44847408232621344, c: 0.08096082677814632, h: 218.73432188477929117 }, // #005f73
+                OkLch { l: 0.60236934811109399, c: 0.10097609551536746, h: 197.39604317217774110 }, // #0a9396
+                OkLch { l: 0.81568863652537782, c: 0.07011388691813732, h: 171.43006696968956248 }, // #94d2bd
+            ],
+        }
     }
 
     /// Vibrant pinks, greens, yellows.
     pub fn neon() -> Self {
-        Self::from_hex(&["#ff00ff", "#00ff41", "#ffff00", "#ff0080", "#00ffff"])
-            .expect("neon palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.70167385587179243, c: 0.32249096477516426, h: 328.36341792345143631 }, // #ff00ff
+                OkLch { l: 0.86856225013429800, c: 0.27758436123611802, h: 144.46611623296706739 }, // #00ff41
+                OkLch { l: 0.96798272032678734, c: 0.21100590772552355, h: 109.76923207652123438 }, // #ffff00
+                OkLch { l: 0.64534933791255666, c: 0.26034308371573917, h: 2.47076075330204237 },   // #ff0080
+                OkLch { l: 0.90539923005576761, c: 0.15455001106436869, h: 194.76894793196385081 }, // #00ffff
+            ],
+        }
     }
 
     /// Browns, greens, golds.
     pub fn earth() -> Self {
-        Self::from_hex(&["#5c4033", "#8b6914", "#6b8e23", "#daa520", "#d2b48c"])
-            .expect("earth palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.39927207159385364, c: 0.04471991685340046, h: 45.87584833921376060 },  // #5c4033
+                OkLch { l: 0.54091619216423759, c: 0.10413400389378805, h: 84.44556495690922304 },  // #8b6914
+                OkLch { l: 0.59948384089518736, c: 0.13738435092056211, h: 126.32247662228316187 }, // #6b8e23
+                OkLch { l: 0.75157231639668942, c: 0.14693369873682238, h: 83.98811694668086147 },  // #daa520
+                OkLch { l: 0.78618663498834429, c: 0.06382105558060952, h: 74.61902764202896776 },  // #d2b48c
+            ],
+        }
     }
 
     /// Black to white via grays.
     pub fn monochrome() -> Self {
-        Self::from_hex(&["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"])
-            .expect("monochrome palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.0,                  c: 0.0,                  h: 0.0 },                   // #000000
+                OkLch { l: 0.37149494360518853, c: 0.00000001384710093, h: 89.87556330123183557 },  // #404040
+                OkLch { l: 0.59987080170711771, c: 0.00000002235958163, h: 89.87556235475514654 },  // #808080
+                OkLch { l: 0.80779623257237509, c: 0.00000003010979339, h: 89.87556362272995614 },  // #c0c0c0
+                OkLch { l: 0.99999999347354618, c: 0.00000003727399554, h: 89.87556309590243586 },  // #ffffff
+            ],
+        }
     }
 
     /// Pastel purples, pinks, teals.
     pub fn vapor() -> Self {
-        Self::from_hex(&["#7b2d8e", "#c77dff", "#ff9ebb", "#80ced6", "#a0e7e5"])
-            .expect("vapor palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.45254128296043711, c: 0.16429144447389848, h: 319.15903804977205027 }, // #7b2d8e
+                OkLch { l: 0.71970087298314189, c: 0.19304222812119678, h: 308.60056204777129096 }, // #c77dff
+                OkLch { l: 0.80539982278616506, c: 0.11977682165104597, h: 0.81858934155943142 },   // #ff9ebb
+                OkLch { l: 0.80385653909481602, c: 0.07766707272151088, h: 204.07761663758176951 }, // #80ced6
+                OkLch { l: 0.88067983293648833, c: 0.07067221527030268, h: 193.71902766763105319 }, // #a0e7e5
+            ],
+        }
     }
 
     /// Reds, oranges, yellows.
     pub fn fire() -> Self {
-        Self::from_hex(&["#800000", "#cc0000", "#ff4500", "#ff8c00", "#ffd700"])
-            .expect("fire palette hex values are valid")
+        Self {
+            colors: vec![
+                OkLch { l: 0.37669208806659682, c: 0.15457669340706801, h: 29.23388519234261196 },  // #800000
+                OkLch { l: 0.53076184644870028, c: 0.21779966665019315, h: 29.23388519234264393 },  // #cc0000
+                OkLch { l: 0.66019948425910413, c: 0.22935607863610208, h: 35.40251385253340288 },  // #ff4500
+                OkLch { l: 0.75054424731978897, c: 0.17911451445506674, h: 58.28268612175613583 },  // #ff8c00
+                OkLch { l: 0.88677107343929762, c: 0.18218604275663958, h: 95.33049348702482462 },  // #ffd700
+            ],
+        }
     }
 
     // -- Registry --
@@ -655,6 +697,98 @@ mod tests {
             result,
             Err(EngineError::UnknownPalette(ref n)) if n == "rainbow"
         ));
+    }
+
+    // -- Capture helper (run once to generate OkLch literals) --
+
+    #[test]
+    #[ignore = "run once to capture OkLch values: cargo test -p art-engine-core -- --ignored capture_palette_oklch --nocapture"]
+    fn capture_palette_oklch() {
+        let palettes: &[(&str, &[&str])] = &[
+            ("ocean", &["#001f3f", "#003366", "#005f73", "#0a9396", "#94d2bd"]),
+            ("neon", &["#ff00ff", "#00ff41", "#ffff00", "#ff0080", "#00ffff"]),
+            ("earth", &["#5c4033", "#8b6914", "#6b8e23", "#daa520", "#d2b48c"]),
+            ("monochrome", &["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"]),
+            ("vapor", &["#7b2d8e", "#c77dff", "#ff9ebb", "#80ced6", "#a0e7e5"]),
+            ("fire", &["#800000", "#cc0000", "#ff4500", "#ff8c00", "#ffd700"]),
+        ];
+        for (name, hexes) in palettes {
+            println!("// {name}:");
+            for h in *hexes {
+                let oklch = srgb_to_oklch(Srgb::from_hex(h).unwrap());
+                println!(
+                    "    OkLch {{ l: {:.17}, c: {:.17}, h: {:.17} }}, // {h}",
+                    oklch.l, oklch.c, oklch.h
+                );
+            }
+        }
+    }
+
+    // -- Built-in palette OkLch literal verification --
+
+    /// Verifies that a built-in palette's OkLch literals match the original hex definitions.
+    fn verify_palette_matches_hex(palette: &Palette, hexes: &[&str]) {
+        assert_eq!(palette.len(), hexes.len());
+        for (i, hex) in hexes.iter().enumerate() {
+            let expected = srgb_to_oklch(Srgb::from_hex(hex).unwrap());
+            let actual = palette.colors[i];
+            assert!(
+                (actual.l - expected.l).abs() < 1e-12
+                    && (actual.c - expected.c).abs() < 1e-12
+                    && (actual.h - expected.h).abs() < 1e-12,
+                "palette color {i} ({hex}) mismatch: {:?} vs {:?}",
+                actual,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_ocean_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::ocean(),
+            &["#001f3f", "#003366", "#005f73", "#0a9396", "#94d2bd"],
+        );
+    }
+
+    #[test]
+    fn builtin_neon_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::neon(),
+            &["#ff00ff", "#00ff41", "#ffff00", "#ff0080", "#00ffff"],
+        );
+    }
+
+    #[test]
+    fn builtin_earth_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::earth(),
+            &["#5c4033", "#8b6914", "#6b8e23", "#daa520", "#d2b48c"],
+        );
+    }
+
+    #[test]
+    fn builtin_monochrome_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::monochrome(),
+            &["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"],
+        );
+    }
+
+    #[test]
+    fn builtin_vapor_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::vapor(),
+            &["#7b2d8e", "#c77dff", "#ff9ebb", "#80ced6", "#a0e7e5"],
+        );
+    }
+
+    #[test]
+    fn builtin_fire_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::fire(),
+            &["#800000", "#cc0000", "#ff4500", "#ff8c00", "#ffd700"],
+        );
     }
 
     // -- Built-in palette tests --
