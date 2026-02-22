@@ -44,4 +44,46 @@ mod tests {
         assert_eq!(img.width(), 16);
         assert_eq!(img.height(), 16);
     }
+
+    #[test]
+    fn write_png_to_invalid_path_returns_io_error() {
+        let field = Field::filled(4, 4, 0.5).unwrap();
+        let palette = Palette::ocean();
+        let path = std::path::Path::new("/nonexistent/dir/test.png");
+        let result = write_png(&field, &palette, path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_png_non_square_dimensions() {
+        let field = Field::filled(32, 8, 0.5).unwrap();
+        let palette = Palette::fire();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wide.png");
+
+        write_png(&field, &palette, &path).unwrap();
+
+        let img = image::open(&path).unwrap().to_rgba8();
+        assert_eq!(img.width(), 32);
+        assert_eq!(img.height(), 8);
+    }
+
+    #[test]
+    fn write_png_pixel_content_matches_palette() {
+        // A field filled with 0.0 should produce the first palette color.
+        let field = Field::filled(2, 2, 0.0).unwrap();
+        let palette = Palette::monochrome(); // black -> white
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("black.png");
+
+        write_png(&field, &palette, &path).unwrap();
+
+        let img = image::open(&path).unwrap().to_rgba8();
+        let pixel = img.get_pixel(0, 0);
+        // Monochrome first color is #000000
+        assert!(pixel[0] < 10, "expected near-black r, got {}", pixel[0]);
+        assert!(pixel[1] < 10, "expected near-black g, got {}", pixel[1]);
+        assert!(pixel[2] < 10, "expected near-black b, got {}", pixel[2]);
+        assert_eq!(pixel[3], 255, "alpha should be 255");
+    }
 }

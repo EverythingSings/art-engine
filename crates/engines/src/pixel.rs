@@ -70,4 +70,49 @@ mod tests {
         assert!(buf_one[1] > 245, "g at t=1: {}", buf_one[1]);
         assert!(buf_one[2] > 245, "b at t=1: {}", buf_one[2]);
     }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn field_to_rgba_length_invariant(
+                w in 1_usize..64,
+                h in 1_usize..64,
+            ) {
+                let field = Field::new(w, h).unwrap();
+                let palette = Palette::ocean();
+                let buf = field_to_rgba(&field, &palette);
+                prop_assert_eq!(buf.len(), w * h * 4);
+            }
+
+            #[test]
+            fn field_to_rgba_alpha_always_255_prop(
+                w in 1_usize..32,
+                h in 1_usize..32,
+                t in 0.0_f64..=1.0,
+            ) {
+                let field = Field::filled(w, h, t).unwrap();
+                let palette = Palette::earth();
+                let buf = field_to_rgba(&field, &palette);
+                for (i, chunk) in buf.chunks(4).enumerate() {
+                    prop_assert!(chunk[3] == 255, "alpha at pixel {} should be 255", i);
+                }
+            }
+
+            #[test]
+            fn field_to_rgba_deterministic(
+                w in 1_usize..16,
+                h in 1_usize..16,
+                t in 0.0_f64..=1.0,
+            ) {
+                let field = Field::filled(w, h, t).unwrap();
+                let palette = Palette::neon();
+                let buf1 = field_to_rgba(&field, &palette);
+                let buf2 = field_to_rgba(&field, &palette);
+                prop_assert_eq!(buf1, buf2);
+            }
+        }
+    }
 }

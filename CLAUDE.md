@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Generative art engine in Rust, compiled to WASM for browser and native for server. Renders via WebGL2 with a composable layer/shader/post-processing pipeline. Exposes a CLI command interface. Two-agent system (Operator + Critic) can drive the CLI autonomously. Full architecture vision in `ARCHITECTURE.md`.
 
-**Current state:** Phase 1 foundation in progress. Core workspace scaffolded with 12 crates. Engine trait, Field, Canvas/Layer data model, color types (Srgb/OKLab/OKLCh), Palette, WebGL2 render module, EngineKind dispatch, CPU snapshot (PNG), and CLI (render + list) implemented.
+**Current state:** Phase 1 foundation in progress. Core workspace scaffolded with 12 crates. Engine trait, Field, Canvas/Layer data model, color types (Srgb/OKLab/OKLCh), Palette, ParticleSystem/FieldSource (CPU-side particle simulation with composable forces), WebGL2 render module, EngineKind dispatch, CPU snapshot (PNG), CLI (render + list), and CliError (structured exit codes) implemented.
 
 ## Build Commands
 
@@ -301,7 +301,7 @@ Non-NaN results are **bit-identical** across all compliant WASM runtimes (Chrome
 ```
 art-engine/
   crates/
-    core/          # Engine trait, Field, Canvas, Layer, Palette (OKLab/OKLCh), PRNG (Xorshift64), Seed, params
+    core/          # Engine trait, Field, Canvas, Layer, Palette (OKLab/OKLCh), ParticleSystem, FieldSource, PRNG (Xorshift64), Seed, params
     engines/       # EngineKind dispatch registry, CPU snapshot (PNG rendering)
     wasm/          # WASM bindings (wasm-bindgen), Lab struct wrapping EngineKind
     cli/           # CLI binary (clap): render, list subcommands
@@ -328,6 +328,8 @@ art-engine/
 - **`Layer`**: Named layer with blend mode, opacity, visibility, content type. Builder pattern via `with_*` methods.
 - **`BlendMode`**: Normal, Additive, Multiply, Screen, Overlay. Normal/Additive use hardware blend; others need shader compositing.
 - **`Seed`**: Serializable struct (engine + dimensions + params + seed + steps) for reproducible specifications.
+- **`ParticleSystem`**: CPU-side particle simulation with emission patterns (Continuous, Burst, Sporadic), force accumulation, drag, culling. Uses `f32`/`glam::Vec2` for GPU upload. Constructs from JSON params.
+- **`FieldSource`** (trait): Composable 2D vector field generators. Implementations: Perlin, Simplex, Curl, Worley, Turbulence noise; PointAttractor, PointRepulsor, LineAttractor, OrbitalAttractor, GravityWell, Vortex; CompositeField.
 
 ### Build Infrastructure Over Ad-Hoc Scripts
 

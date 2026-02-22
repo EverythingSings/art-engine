@@ -752,6 +752,47 @@ mod tests {
     }
 
     #[test]
+    fn sporadic_intermediate_probability_emits_some() {
+        // With probability=0.5 over 200 steps, we expect roughly 100 emissions.
+        // Use a wide tolerance to avoid flakiness.
+        let mut config = test_config();
+        config.emission.pattern = EmissionPattern::Sporadic { probability: 0.5 };
+        config.emission.lifetime_range = (1000.0, 1000.0);
+        config.max_particles = 1000;
+
+        let mut sys = ParticleSystem::new(config, 42);
+        for _ in 0..200 {
+            sys.step();
+        }
+        let count = sys.count();
+        assert!(
+            count > 30 && count < 170,
+            "expected roughly 100 particles at p=0.5 over 200 steps, got {count}"
+        );
+    }
+
+    #[test]
+    fn to_density_field_with_out_of_range_positions() {
+        // Particles with positions outside [0, 1] should still produce a valid field
+        // (positions are clamped to grid bounds in to_density_field).
+        let mut config = test_config();
+        config.emission.pattern = EmissionPattern::Burst { count: 5 };
+        config.emission.position_min = Vec2::new(-0.5, -0.5);
+        config.emission.position_max = Vec2::new(1.5, 1.5);
+        config.emission.lifetime_range = (100.0, 100.0);
+        let mut sys = ParticleSystem::new(config, 42);
+        sys.step();
+
+        let field = sys.to_density_field(16, 16).unwrap();
+        for &v in field.data() {
+            assert!(
+                (0.0..=1.0).contains(&v),
+                "density field value {v} out of [0, 1] with out-of-range positions"
+            );
+        }
+    }
+
+    #[test]
     fn to_density_field_invalid_dimensions_returns_error() {
         let sys = ParticleSystem::new(test_config(), 42);
         assert!(sys.to_density_field(0, 10).is_err());

@@ -148,6 +148,22 @@ mod tests {
     }
 
     #[test]
+    fn from_name_with_zero_dimensions_returns_error() {
+        let result = EngineKind::from_name("gray-scott", 0, 32, 42, &json!({}));
+        assert!(result.is_err(), "width=0 should fail");
+        let result = EngineKind::from_name("gray-scott", 32, 0, 42, &json!({}));
+        assert!(result.is_err(), "height=0 should fail");
+    }
+
+    #[test]
+    fn list_engines_round_trip_all_names_succeed() {
+        for name in EngineKind::list_engines() {
+            let result = EngineKind::from_name(name, 16, 16, 42, &json!({}));
+            assert!(result.is_ok(), "from_name failed for listed engine: {name}");
+        }
+    }
+
+    #[test]
     fn object_safety() {
         let engine = EngineKind::from_name("gray-scott", 16, 16, 42, &json!({})).unwrap();
         let boxed: Box<dyn Engine> = Box::new(engine);
