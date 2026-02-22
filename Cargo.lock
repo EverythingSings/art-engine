@@ -47,6 +47,8 @@ name = "art-engine-gray-scott"
 version = "0.1.0"
 dependencies = [
  "art-engine-core",
+ "proptest",
+ "serde_json",
 ]
 
 [[package]]
