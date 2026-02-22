@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 /// Uses the standard shift parameters (13, 7, 17) for good statistical
 /// properties across the full 64-bit state space. Seed of 0 is automatically
 /// replaced with a non-zero fallback to avoid the all-zeros fixed point.
+///
+/// **NOT cryptographically secure.** Do not use for key generation, tokens,
+/// or any security-sensitive purpose.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Xorshift64 {
     state: u64,

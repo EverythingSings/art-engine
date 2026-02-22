@@ -260,6 +260,12 @@ impl ParticleSystem {
                 if self.rng.next_f64() < probability {
                     1
                 } else {
+                    // Consume the same number of PRNG values as spawn_particle
+                    // would, so the PRNG stream stays synchronized regardless
+                    // of the emission outcome.
+                    for _ in 0..8 {
+                        let _ = self.rng.next_f64();
+                    }
                     0
                 }
             }
@@ -479,6 +485,32 @@ mod tests {
         }
         // With probability 1.0, should emit 1 particle per step = 10 total
         assert_eq!(sys.count(), 10);
+    }
+
+    #[test]
+    fn sporadic_determinism_at_intermediate_probability() {
+        // At intermediate probability, sporadic emission used to consume
+        // different numbers of PRNG values depending on the check outcome.
+        // This test verifies that two systems with the same seed stay
+        // synchronized even when emission outcomes differ across steps.
+        let mut config = test_config();
+        config.emission.pattern = EmissionPattern::Sporadic { probability: 0.5 };
+        config.emission.lifetime_range = (1000.0, 1000.0);
+        config.max_particles = 1000;
+
+        let mut sys_a = ParticleSystem::new(config.clone(), 42);
+        let mut sys_b = ParticleSystem::new(config, 42);
+
+        for _ in 0..100 {
+            sys_a.step();
+            sys_b.step();
+        }
+
+        assert_eq!(sys_a.count(), sys_b.count(), "particle counts diverged");
+        for (a, b) in sys_a.particles().iter().zip(sys_b.particles().iter()) {
+            assert_eq!(a.position, b.position, "positions diverged");
+            assert_eq!(a.velocity, b.velocity, "velocities diverged");
+        }
     }
 
     #[test]
