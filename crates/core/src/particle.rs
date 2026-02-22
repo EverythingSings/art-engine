@@ -333,6 +333,8 @@ impl ParticleSystem {
                         force.sample(particle.position.x as f64, particle.position.y as f64, time);
                     (ax + fx, ay + fy)
                 });
+            let ax = if ax.is_finite() { ax } else { 0.0 };
+            let ay = if ay.is_finite() { ay } else { 0.0 };
             particle.acceleration = Vec2::new(ax as f32, ay as f32);
 
             // Apply drag
@@ -777,6 +779,52 @@ mod tests {
         assert_eq!(sys_a.count(), sys_b.count());
         for (a, b) in sys_a.particles().iter().zip(sys_b.particles().iter()) {
             assert_eq!(a.position, b.position);
+        }
+    }
+
+    // =======================================================================
+    // NaN guard
+    // =======================================================================
+
+    /// A force source that returns NaN, simulating a buggy FieldSource impl.
+    struct NanForce;
+
+    impl crate::field_source::FieldSource for NanForce {
+        fn sample(&self, _x: f64, _y: f64, _time: f64) -> (f64, f64) {
+            (f64::NAN, f64::INFINITY)
+        }
+    }
+
+    #[test]
+    fn nan_force_does_not_corrupt_particle_positions() {
+        let mut config = test_config();
+        config.emission.pattern = EmissionPattern::Burst { count: 5 };
+        config.emission.lifetime_range = (100.0, 100.0);
+        let mut sys = ParticleSystem::new(config, 42).with_force(Box::new(NanForce));
+
+        sys.step(); // emit + integrate with NaN forces
+
+        for p in sys.particles() {
+            assert!(
+                p.position.x.is_finite(),
+                "position.x should be finite, got {}",
+                p.position.x
+            );
+            assert!(
+                p.position.y.is_finite(),
+                "position.y should be finite, got {}",
+                p.position.y
+            );
+            assert!(
+                p.velocity.x.is_finite(),
+                "velocity.x should be finite, got {}",
+                p.velocity.x
+            );
+            assert!(
+                p.velocity.y.is_finite(),
+                "velocity.y should be finite, got {}",
+                p.velocity.y
+            );
         }
     }
 
