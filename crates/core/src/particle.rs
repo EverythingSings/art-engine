@@ -140,6 +140,16 @@ impl ParticleSystem {
         &self.particles
     }
 
+    /// Mutable slice of live particles, for engines that need to apply
+    /// per-frame nudges (e.g. an external influence field's gradient
+    /// applied as a velocity delta). Mutating fields other than
+    /// `velocity` and `acceleration` may break the simulation invariants
+    /// the system normally maintains; prefer `velocity` for force-style
+    /// effects.
+    pub fn particles_mut(&mut self) -> &mut [Particle] {
+        &mut self.particles
+    }
+
     /// Number of live particles.
     pub fn count(&self) -> usize {
         self.particles.len()

@@ -1,0 +1,279 @@
+id: CAP-RENDER-ENGINE
+name: Render Engine Snapshot
+status: draft
+version: 0.1.0
+stability: provisional
+description: >
+  Run one registered `Engine` (gray-scott, physarum, particles, …) for
+  N steps and write a single PNG snapshot of its final field, optionally
+  through a per-layer shader chain + post-processing chain via the
+  headless GPU pipeline. Single-frame counterpart to `render-sequence`
+  and the GPU-shader counterpart to `compose`.
+rationale: >
+  The engine-driven single-image path. Every engine crate in the
+  workspace (gray-scott, physarum, mandelbrot, …) produces a `Field`;
+  this capability is how you turn that field into a PNG you can post,
+  tweet, or test against. The GPU/shader/post chain is the same one
+  `render-episode` uses, so changes there improve both.
+
+actors:
+  - cli
+  - agent
+
+inputs:
+  schema_name: RenderRequest
+  fields:
+    - name: engine
+      type: string
+      required: true
+      description: 'Engine identifier from `list-engines.engines`.'
+    - name: width
+      type: usize
+      required: false
+      default: 256
+      description: 'Canvas width in pixels (1..=8192).'
+    - name: height
+      type: usize
+      required: false
+      default: 256
+      description: 'Canvas height in pixels (1..=8192).'
+    - name: steps
+      type: usize
+      required: false
+      default: 1000
+      description: 'Number of `Engine::step` calls before snapshotting. Max 1_000_000.'
+    - name: seed
+      type: u64
+      required: false
+      default: 42
+      description: 'PRNG seed passed to the engine for deterministic output.'
+    - name: palette
+      type: string
+      required: false
+      default: ocean
+      description: 'Palette name from `list-engines.palettes`.'
+    - name: output
+      type: Path
+      required: false
+      default: output.png
+      description: 'Where the PNG is written. Parent directory must exist.'
+    - name: params
+      type: JsonObject
+      required: false
+      default: '{}'
+      description: 'Engine parameters. Schema is engine-specific (e.g. gray-scott has feed_rate, kill_rate, diffusion_a, diffusion_b).'
+    - name: postfx
+      type: bool
+      required: false
+      default: false
+      description: 'Apply CRT post-processing (scanlines + vignette + grain). Only used on the CPU palette path; ignored when `--gpu` is set (use `--post` instead).'
+    - name: gpu
+      type: bool
+      required: false
+      default: false
+      description: >
+        Route the field through the headless GPU pipeline instead of the
+        CPU palette path. Required to use `--shader` or `--post`.
+        Requires libEGL (see ADR-001).
+    - name: shader
+      type: 'string[]'
+      required: false
+      description: >
+        Per-layer shader effect, repeatable. Format `name:json` where
+        name is a BuiltinShader identifier and json is the uniform
+        override map. Example: `kaleidoscope:{"u_segments":6}`.
+        Applied in order before compositing.
+    - name: post
+      type: 'string[]'
+      required: false
+      description: >
+        Post-processing effect, repeatable. Same `name:json` format.
+        Names: bloom, vignette, grain, color_grade.
+  validation_rules:
+    - 'width and height must be 1..=8192 (MAX_DIMENSION)'
+    - 'steps must be 0..=1_000_000 (MAX_STEPS)'
+    - 'engine must resolve via EngineKind::from_name'
+    - 'palette must resolve via Palette::from_name'
+    - 'params must parse as a JSON object'
+    - '--shader and --post require --gpu (rejected with Input error otherwise)'
+    - 'Each --shader / --post entry must parse as `name:json` with non-empty name and valid JSON'
+
+outputs:
+  schema_name: RenderReport
+  schema_version: 0  # ← like list-engines and compose, no schema_version in current JSON
+  fields:
+    - name: engine
+      type: string
+    - name: width
+      type: usize
+    - name: height
+      type: usize
+    - name: steps
+      type: usize
+    - name: seed
+      type: u64
+    - name: output
+      type: Path
+    - name: postfx
+      type: bool
+    - name: gpu
+      type: bool
+    - name: shader
+      type: 'string[]'
+    - name: post
+      type: 'string[]'
+
+  formats:
+    human_readable:
+      contract: |
+        One line on stderr summarising the render:
+          rendered <engine> (<W>x<H>, <N> steps, seed <S>, <CPU|GPU>) -> <output>
+        The PNG is the real output, on disk at `output`.
+    json:
+      contract: |
+        When `--json` is set on the global CLI, the RenderReport is
+        emitted on stdout as one pretty-printed JSON object. Same
+        compatibility caveats as `compose` and `list-engines`.
+
+errors:
+  closed_set:
+    - code: Input
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: >
+        Inspect the error message. Common causes: unknown engine /
+        palette / shader / post name; --shader or --post used without
+        --gpu; dimensions or steps out of range; params not a JSON
+        object; malformed `name:json` flag value.
+    - code: Engine
+      category: integration_error
+      recoverable: false
+      exit_code: 1
+      remediation: >
+        The engine failed during construction or step(). Chained
+        EngineError carries the typed failure (e.g. invalid params for
+        the specific engine).
+    - code: Io
+      category: io_error
+      recoverable: false
+      exit_code: 1
+      remediation: 'Confirm output path is writable and parent dir exists.'
+    - code: Gpu
+      category: integration_error
+      recoverable: false
+      exit_code: 6
+      remediation: >
+        Headless GL context creation or pipeline init failed. Run
+        `art-engine-episode doctor` to diagnose (libEGL missing is
+        the most common cause on Windows native — see ADR-001).
+
+authority:
+  requires_filesystem: true
+  requires_network: false
+  requires_credentials: false
+  requires_process_execution: false
+  requires_destructive_write: true   # overwrites output PNG
+  requires_telemetry: false
+  permission_behavior: declare
+  authority_types:
+    - filesystem_write
+  notes: >
+    Writes one PNG to the path given. With --gpu, calls into the
+    headless GL pipeline (no subprocess), which is itself sandboxed
+    to a libEGL pbuffer surface — no actual window or display.
+
+lifecycle:
+  long_running: true       # tens of seconds at typical step counts; minutes at the max
+  owner_scope: command
+  states:
+    - created
+    - engine_initialised
+    - stepping
+    - rendering
+    - completed
+    - failed
+  cancellation: none
+  cleanup_required: false
+  cleanup_behavior: none
+  error_behavior: typed error
+
+interfaces:
+  cli:
+    exposed: true
+    command: >
+      art-engine render <engine> [-W <W>] [-H <H>] [-s <steps>]
+        [--seed <S>] [-p <palette>] [-o <output>] [--params <json>]
+        [--postfx] [--gpu] [--shader <name:json>]... [--post <name:json>]...
+        [--json]
+    json_output_required: false
+    stdin_supported: false
+    stdout_supported: true
+    exit_codes:
+      - code: 0
+        meaning: success
+      - code: 2
+        meaning: clap parser usage error
+      - code: 3
+        meaning: validation failure (Input error)
+      - code: 1
+        meaning: engine or I/O error
+      - code: 6
+        meaning: GPU pipeline failed to initialise
+    stdout_contract: 'JSON RenderReport when --json is set; otherwise empty (PNG is the result).'
+    stderr_contract: 'One human-readable summary line on success; structured error on failure.'
+  desktop:
+    exposed: false
+  api:
+    exposed: false
+
+observability:
+  events:
+    - render.engine.started
+    - render.engine.completed
+    - render.engine.failed
+  metrics:
+    - steps_completed
+    - render_seconds
+    - gpu_used
+  logs: []
+  secrets_redacted: true
+
+acceptance_criteria:
+  - 'render <known-engine> writes a non-empty PNG at the output path'
+  - 'render with an unknown engine name exits 3'
+  - 'render --shader voronoi:{} without --gpu exits 3 with the documented Input error'
+  - 'render --gpu --shader kaleidoscope:{} produces a different PNG than the CPU path'
+  - 'render --params with malformed JSON exits 3'
+  - 'render outside dimension bounds (0 or >8192) exits 3'
+
+required_tests:
+  - 'CLI parser tests: covered by existing unit tests'
+  - 'parse_effect tests: covered'
+  - 'Integration: render gray-scott 32x32 100 steps to temp PNG, assert non-empty: not yet wired'
+  - 'GPU snapshot test: lives in art-engine-engines::gpu_snapshot::tests (skipped without ART_ENGINE_REQUIRE_GL)'
+
+compatibility:
+  machine_output_schema: 'RenderReport (unversioned)'
+  breaking_change_requires: ADR or capability version bump
+  surfaces:
+    - 'Command shape: positional engine + named flags'
+    - 'Default values (W=256, H=256, steps=1000, seed=42, palette=ocean, output=output.png)'
+    - 'Effect flag format: `name:json` with name resolved via BuiltinShader::from_name'
+    - 'Determinism contract: same engine + width + height + seed + steps + params → identical PNG bytes (modulo the engine itself preserving this — verified for gray-scott + physarum + particles + mandelbrot in their respective crate tests)'
+    - 'CLI exit codes (0/1/2/3/6)'
+  open_drift:
+    - >
+      JSON RenderReport has no `schema_version` field. Same issue as
+      list-engines + compose — queued for the next CLI iteration.
+    - >
+      The `--postfx` and `--gpu --post` paths produce visually distinct
+      outputs from the same engine + seed + steps. This is intentional
+      (CRT-postfx is a CPU-only artistic filter; GPU --post is the
+      production HDR chain) but agents may need explicit guidance to
+      pick the right one.
+    - >
+      Effect param JSON schemas for individual BuiltinShader variants
+      (voronoi.u_scale, kaleidoscope.u_segments, etc.) are not enumerated
+      here. See `crates/core/src/render/pipeline.rs::default_uniform_schema`
+      for the canonical list.

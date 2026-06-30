@@ -1,0 +1,12 @@
+[package]
+name = "art-engine-excitable"
+version = "0.1.0"
+edition = "2021"
+description = "Barkley excitable-media (spiral wave) engine for the art-engine"
+
+[dependencies]
+art-engine-core = { path = "../core" }
+serde_json = "1"
+
+[dev-dependencies]
+proptest = "1"

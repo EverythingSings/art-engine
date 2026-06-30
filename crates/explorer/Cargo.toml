@@ -1,0 +1,20 @@
+[package]
+name = "art-engine-explorer"
+version = "0.1.0"
+edition = "2021"
+description = "Native egui dashboard for exploring the art-engine's possibility space."
+
+[[bin]]
+name = "explorer"
+path = "src/main.rs"
+
+[dependencies]
+art-engine-core = { path = "../core", features = ["render", "native-gpu"] }
+art-engine-engines = { path = "../engines", features = ["gpu"] }
+eframe = { version = "0.29", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+image = { version = "0.25", default-features = false, features = ["png", "gif"] }
+arboard = "3"

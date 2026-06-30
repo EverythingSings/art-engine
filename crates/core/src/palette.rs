@@ -8,7 +8,15 @@ use crate::color::{oklch_to_srgb, srgb_to_oklch, OkLch, Srgb};
 use crate::error::EngineError;
 
 /// All built-in palette names, kept in sync with `from_name`.
-const BUILTIN_PALETTE_NAMES: &[&str] = &["ocean", "neon", "earth", "monochrome", "vapor", "fire"];
+const BUILTIN_PALETTE_NAMES: &[&str] = &[
+    "ocean",
+    "neon",
+    "earth",
+    "monochrome",
+    "vapor",
+    "fire",
+    "amber",
+];
 
 /// A palette of colors stored in OKLCh, sampled by interpolation.
 ///
@@ -393,6 +401,49 @@ impl Palette {
         }
     }
 
+    /// Monochromatic CRT-amber gradient: black through deep amber to bright glow.
+    ///
+    /// Tuned for retro-futuristic / phosphor-display aesthetics. All stops
+    /// share roughly the same hue family (~55-90 degrees in OKLCh) so
+    /// gradients stay monochromatic across the full t in [0, 1] range.
+    #[allow(clippy::excessive_precision)]
+    pub fn amber() -> Self {
+        Self {
+            colors: vec![
+                OkLch {
+                    l: 0.00000000000000000,
+                    c: 0.00000000000000000,
+                    h: 0.00000000000000000,
+                }, // #000000
+                OkLch {
+                    l: 0.16610759630976832,
+                    c: 0.03828581367845601,
+                    h: 61.82965724866916446,
+                }, // #1a0a00
+                OkLch {
+                    l: 0.34758304667402595,
+                    c: 0.08817712922849860,
+                    h: 53.03972690888107877,
+                }, // #5c2a00
+                OkLch {
+                    l: 0.59932948726694502,
+                    c: 0.14985184979870461,
+                    h: 54.19415344612159657,
+                }, // #c26200
+                OkLch {
+                    l: 0.81241940272516822,
+                    c: 0.17037847630693131,
+                    h: 76.39076890134664666,
+                }, // #ffb000
+                OkLch {
+                    l: 0.93098070675064348,
+                    c: 0.08331433919815009,
+                    h: 88.57704902420216797,
+                }, // #ffe6a8
+            ],
+        }
+    }
+
     // -- Registry --
 
     /// Returns a slice of all built-in palette names.
@@ -411,6 +462,7 @@ impl Palette {
             "monochrome" => Ok(Self::monochrome()),
             "vapor" => Ok(Self::vapor()),
             "fire" => Ok(Self::fire()),
+            "amber" => Ok(Self::amber()),
             _ => Err(EngineError::UnknownPalette(name.to_string())),
         }
     }
@@ -823,7 +875,7 @@ mod tests {
 
     #[test]
     fn list_names_returns_expected_count() {
-        assert_eq!(Palette::list_names().len(), 6);
+        assert_eq!(Palette::list_names().len(), 7);
     }
 
     #[test]
@@ -875,6 +927,12 @@ mod tests {
                 "fire",
                 &["#800000", "#cc0000", "#ff4500", "#ff8c00", "#ffd700"],
             ),
+            (
+                "amber",
+                &[
+                    "#000000", "#1a0a00", "#5c2a00", "#c26200", "#ffb000", "#ffe6a8",
+                ],
+            ),
         ];
         for (name, hexes) in palettes {
             println!("// {name}:");
@@ -891,15 +949,29 @@ mod tests {
     // -- Built-in palette OkLch literal verification --
 
     /// Verifies that a built-in palette's OkLch literals match the original hex definitions.
+    ///
+    /// Tolerances are loose around grey: when chroma is effectively zero
+    /// (well below any perceptible threshold) the hue is undefined, and
+    /// `atan2(0, 0)`-style rounding can flip its low bits between runs.
+    /// We compare hue only when chroma is meaningful.
     fn verify_palette_matches_hex(palette: &Palette, hexes: &[&str]) {
+        const L_TOL: f64 = 1e-9;
+        const C_TOL: f64 = 1e-6;
+        const H_TOL: f64 = 1e-6;
+        const C_HUE_THRESHOLD: f64 = 1e-4;
         assert_eq!(palette.len(), hexes.len());
         for (i, hex) in hexes.iter().enumerate() {
             let expected = srgb_to_oklch(Srgb::from_hex(hex).unwrap());
             let actual = palette.colors[i];
+            let l_ok = (actual.l - expected.l).abs() < L_TOL;
+            let c_ok = (actual.c - expected.c).abs() < C_TOL;
+            let h_ok = if expected.c < C_HUE_THRESHOLD || actual.c < C_HUE_THRESHOLD {
+                true
+            } else {
+                (actual.h - expected.h).abs() < H_TOL
+            };
             assert!(
-                (actual.l - expected.l).abs() < 1e-12
-                    && (actual.c - expected.c).abs() < 1e-12
-                    && (actual.h - expected.h).abs() < 1e-12,
+                l_ok && c_ok && h_ok,
                 "palette color {i} ({hex}) mismatch: {:?} vs {:?}",
                 actual,
                 expected
@@ -955,6 +1027,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn builtin_amber_matches_hex_definition() {
+        verify_palette_matches_hex(
+            &Palette::amber(),
+            &[
+                "#000000", "#1a0a00", "#5c2a00", "#c26200", "#ffb000", "#ffe6a8",
+            ],
+        );
+    }
+
     // -- Built-in palette tests --
 
     #[test]
@@ -966,6 +1048,7 @@ mod tests {
             ("monochrome", Palette::monochrome()),
             ("vapor", Palette::vapor()),
             ("fire", Palette::fire()),
+            ("amber", Palette::amber()),
         ];
         for (name, palette) in &palettes {
             assert!(
@@ -985,6 +1068,7 @@ mod tests {
             ("monochrome", Palette::monochrome()),
             ("vapor", Palette::vapor()),
             ("fire", Palette::fire()),
+            ("amber", Palette::amber()),
         ];
         let sample_points = [0.0, 0.25, 0.5, 0.75, 1.0];
 

@@ -29,8 +29,14 @@ impl GpuContext {
     pub fn new(gl: glow::Context) -> Result<Self, String> {
         use glow::HasContext;
 
+        // Some GL implementations (notably Mesa via EGL/GLES on Linux) return
+        // extension names with a `GL_` prefix from `glGetStringi(GL_EXTENSIONS)`,
+        // while others return the bare name. WebGL contexts return the bare
+        // name. Accept either form so the same code path works in browser
+        // and native headless contexts.
+        let exts = gl.supported_extensions();
         let supports_color_buffer_float =
-            gl.supported_extensions().contains("EXT_color_buffer_float");
+            exts.contains("EXT_color_buffer_float") || exts.contains("GL_EXT_color_buffer_float");
 
         if !supports_color_buffer_float {
             return Err("required extension EXT_color_buffer_float is not supported".to_string());

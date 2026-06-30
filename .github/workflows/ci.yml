@@ -44,3 +44,16 @@ jobs:
 
       - name: WASM
         run: bash xtask.sh wasm
+
+      # Phase 2 GPU pipeline tests. We install Mesa + libEGL so the headless
+      # EGL/GLES path can run via the llvmpipe software renderer. Set
+      # `ART_ENGINE_REQUIRE_GL=1` (inside the xtask) so the tests fail loudly
+      # if EGL is missing rather than silently skipping.
+      - name: Install Mesa for headless GL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libegl-mesa0 libgl1-mesa-dri libglvnd0
+
+      - name: Visual test (GPU pipeline)
+        run: bash xtask.sh visual-test

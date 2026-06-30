@@ -31,10 +31,21 @@ impl RenderTarget {
     /// or if the framebuffer is not complete.
     #[allow(unsafe_code)]
     pub fn new(gl: &glow::Context, width: u32, height: u32) -> Result<Self, String> {
+        Self::with_config(gl, &TextureConfig::rgba16f(width, height))
+    }
+
+    /// Creates a render target backed by a texture matching `config`.
+    ///
+    /// Use this instead of [`RenderTarget::new`] when you need an RGBA8
+    /// final target (for `glReadPixels` of `UNSIGNED_BYTE`) or any other
+    /// non-default format.
+    #[allow(unsafe_code)]
+    pub fn with_config(gl: &glow::Context, config: &TextureConfig) -> Result<Self, String> {
         use glow::HasContext;
 
-        let config = TextureConfig::rgba16f(width, height);
-        let texture = create_texture(gl, &config)?;
+        let width = config.width;
+        let height = config.height;
+        let texture = create_texture(gl, config)?;
 
         // SAFETY: glow wraps raw GL calls as unsafe. We create, configure,
         // and verify a framebuffer using valid texture handles.

@@ -1,0 +1,102 @@
+# deny.toml — license, advisory, and supply-chain policy for art-engine.
+#
+# Run with:
+#   cargo deny check                # all checks
+#   cargo deny check licenses       # license-only
+#   cargo deny check advisories     # RustSec advisories
+#   cargo deny check bans           # version conflict / banned-crate checks
+#   cargo deny check sources        # registry/source whitelist
+#
+# Policy reference:
+#   - CLAUDE.md > "OSS-Only Dependencies" — all deps must be permissive OSS
+#     (MIT, Apache-2.0, BSD, MPL-2.0, Zlib). No proprietary, AGPL, or GPL.
+#   - spec/seed.yaml > risk_profile — local-first, no credentials, no network.
+#   - spec/decisions/ADR-001-wsl-render-path.md — supported targets are
+#     x86_64-unknown-linux-gnu (native + WSL) and wasm32-unknown-unknown.
+#
+# This file is the canonical enforcement of those policies. Changes require
+# either updating CLAUDE.md / seed.yaml or filing an ADR explaining why a
+# new license category is acceptable.
+
+[graph]
+all-features = true
+# Match the workspace's supported target platforms.
+# x86_64-pc-windows-msvc is listed because it's where developer machines
+# build the storyboard / non-GPU crates; the GPU pipeline itself is only
+# exercised on Linux/WSL per ADR-001.
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "wasm32-unknown-unknown" },
+]
+
+# ── advisories ────────────────────────────────────────────────────────
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/RustSec/advisory-db"]
+# `yanked = "deny"` is the safe default — a yanked crate version usually
+# indicates the maintainer pulled it for a reason worth knowing about.
+yanked = "deny"
+# Explicit allowlist of advisories we've reviewed and accepted. Each entry
+# must come with a comment explaining the rationale and an expiry plan.
+ignore = []
+
+# ── licenses ──────────────────────────────────────────────────────────
+[licenses]
+# Permissive licenses only, per CLAUDE.md > "OSS-Only Dependencies".
+# The order doesn't matter to cargo-deny; alphabetised for readability.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",                  # Boost Software License — permissive
+    "CC0-1.0",                  # public-domain dedication; common for serde helpers
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",                  # weakly-copyleft but per-file; allowed per project policy
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+]
+# Anything else fails the check. Notably *not* in the allowlist:
+#   - GPL-2.0 / GPL-3.0 / AGPL-3.0 / LGPL-* (copyleft incompatible with redistribution)
+#   - SSPL-1.0 / BUSL-1.1 / Commons-Clause (non-OSS or source-available)
+#   - Any "no license" / unlicensed crate (cargo-deny treats missing as an error)
+confidence-threshold = 0.85
+exceptions = []
+# Treat private (path-only) workspace crates as license-clear. The workspace
+# itself is the project; our internal crates don't need their own SPDX tag.
+private = { ignore = true, registries = [] }
+
+# ── bans (versioning + crate-level rules) ─────────────────────────────
+[bans]
+# Multiple major versions of the same crate are a warning. Common with serde
+# / proc-macro ecosystem churn; we want to know but not block.
+multiple-versions = "warn"
+# Wildcard version requirements are an anti-pattern: they let any future
+# version in, which defeats Cargo's reproducibility.
+wildcards = "deny"
+highlight = "all"
+# Explicit allowlist of crates with stated reason.
+allow = []
+# Explicit denylist with reason — empty for now. If we ever ban a crate
+# (security or maintenance issue), document it here with a rationale line.
+deny = []
+# Suppress the multiple-versions warning for specific crates known to drift.
+skip = []
+# Same as skip, but for entire subtrees — useful when a leaf dep pulls a
+# whole alternate stack we don't want to dedupe.
+skip-tree = []
+
+# ── sources ──────────────────────────────────────────────────────────
+[sources]
+# Reject crates from anywhere except the canonical crates.io registry.
+# Adding a non-crates.io source requires a security review and listing it
+# in `allow-registry` / `allow-git` below.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

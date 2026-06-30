@@ -9,14 +9,27 @@ use art_engine_core::field::Field;
 use art_engine_core::palette::Palette;
 use std::path::Path;
 
-use crate::pixel::field_to_rgba;
+use crate::pixel::{apply_postfx, field_to_rgba, PostFx};
 
 /// Writes a field as a PNG image, mapping values through the given palette.
 ///
 /// Returns `EngineError::InvalidDimensions` if the field dimensions overflow
 /// `u32`, or `EngineError::Io` on write failure.
 pub fn write_png(field: &Field, palette: &Palette, path: &Path) -> Result<(), EngineError> {
-    let rgba = field_to_rgba(field, palette);
+    write_png_with_postfx(field, palette, &PostFx::default(), path)
+}
+
+/// Like [`write_png`] but applies CRT-style post-processing to the RGBA
+/// buffer before saving. Pass `&PostFx::default()` for a no-op equivalent
+/// to [`write_png`].
+pub fn write_png_with_postfx(
+    field: &Field,
+    palette: &Palette,
+    postfx: &PostFx,
+    path: &Path,
+) -> Result<(), EngineError> {
+    let mut rgba = field_to_rgba(field, palette);
+    apply_postfx(&mut rgba, field.width(), field.height(), postfx);
     let w = u32::try_from(field.width()).map_err(|_| EngineError::InvalidDimensions)?;
     let h = u32::try_from(field.height()).map_err(|_| EngineError::InvalidDimensions)?;
     let img = image::RgbaImage::from_raw(w, h, rgba)

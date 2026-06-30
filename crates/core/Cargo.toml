@@ -7,10 +7,15 @@ description = "Core types and traits for the art-engine: Engine trait, Field, Pa
 [features]
 default = []
 render = ["glow"]
+# Native (non-WASM) headless GPU support via EGL + GLES.
+# `khronos-egl/dynamic` brings its own runtime libEGL.so loader, so users
+# don't need libegl-dev installed.
+native-gpu = ["render", "khronos-egl"]
 
 [dependencies]
 glam = "0.29"
 glow = { version = "0.16", optional = true }
+khronos-egl = { version = "6", optional = true, features = ["dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 noise = "=0.9.0"

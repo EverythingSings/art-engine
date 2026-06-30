@@ -35,6 +35,21 @@ impl TextureConfig {
             filter: glow::LINEAR,
         }
     }
+
+    /// Creates a config for an `RGBA8` (SDR) texture with `LINEAR` filtering.
+    ///
+    /// Used as the final target before pixel readback — `glReadPixels(RGBA,
+    /// UNSIGNED_BYTE)` is only guaranteed for `RGBA8` framebuffers per the
+    /// GLES 3 spec; reading the same combo from an `RGBA16F` attachment
+    /// silently returns zeros on some implementations (Mesa).
+    pub fn rgba8(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            internal_format: glow::RGBA8,
+            filter: glow::LINEAR,
+        }
+    }
 }
 
 /// Returns the GL pixel type that corresponds to a given internal format.

@@ -1,0 +1,261 @@
+id: CAP-RENDER-EPISODE
+name: Render Episode
+status: draft
+version: 0.1.0
+stability: provisional
+description: >
+  Render an authored storyboard + audio + per-frame audio-feature track into a 1080×1920 mp4
+  with composited karaoke captions, persistent header, channel sigil watermark, scene-pips
+  scope strip, and corner registration brackets. The output is a single self-contained file
+  suitable for direct upload to a vertical short-form platform.
+rationale: >
+  The product's reason for existing. Every other capability supports this one: BuiltinShader is
+  the closed shader set the storyboard references, the engine crates produce Fields, the CLI
+  exposes the renderer. Storyboard authoring (Backdrop / Foreground / Transition) is the public
+  composition surface for this capability.
+actors:
+  - cli
+  - agent
+
+inputs:
+  schema_name: RenderEpisodeRequest
+  fields:
+    - name: storyboard_path
+      type: Path
+      required: true
+      description: 'Path to the storyboard.ron file. Parsed via art-engine-storyboard::Storyboard::load.'
+    - name: features_path
+      type: Path
+      required: true
+      description: >
+        Path to a features.json produced by examined-machine/scripts/extract_features.py — a
+        per-frame array of {rms, onset, centroid} normalised to [0..1]. fps must match the
+        storyboard.
+    - name: output_path
+      type: Path
+      required: true
+      description: Path where the resulting mp4 is written. Parent directory created if missing.
+  validation_rules:
+    - 'storyboard_path must parse as RON and pass Storyboard::validate (non-empty scenes, ordered + non-overlapping, fps>0)'
+    - 'features.fps must equal storyboard.fps'
+    - 'audio and output paths must be utf-8 representable for ffmpeg argv'
+    - 'storyboard.subtitles, when present, must be readable; karaoke ASS events get merged into the generated meta.ass'
+
+outputs:
+  schema_name: RenderEpisodeOutput
+  fields:
+    - name: output_path
+      type: Path
+      description: 'Absolute path to the produced mp4.'
+    - name: duration_s
+      type: f32
+      description: 'Storyboard duration. Matches audio duration ± one frame.'
+    - name: frame_count
+      type: u32
+      description: 'storyboard.duration() * storyboard.fps, rounded.'
+    - name: render_seconds
+      type: f32
+      description: 'Wall-clock render time. Useful for capacity planning.'
+  formats:
+    human_readable: true     # currently the only mode (stderr progress + final summary)
+    json: not yet implemented (queued)
+    json_schema_version_required: when json output ships
+
+errors:
+  closed_set:
+    # Codes correspond to the RenderError enum in art-engine-episode/src/error.rs.
+    - code: Storyboard
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: 'Fix the storyboard.ron parse / validation error and retry.'
+    - code: Features
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: 'Regenerate features.json with the matching fps.'
+    - code: FpsMismatch
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: 'Re-run extract_features.py with --fps matching the storyboard fps.'
+    - code: NonUtf8Path
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: 'Avoid non-utf-8 characters in audio / output paths.'
+    - code: MetaAss
+      category: io_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Inspect the failing path. Likely filesystem permission or disk space.'
+    - code: HeadlessGl
+      category: integration_error
+      recoverable: false
+      exit_code: 6
+      remediation: 'libEGL or DRI3 is unavailable. Run inside WSL2 with Mesa, or install ANGLE binaries (libEGL.dll + libGLESv2.dll + d3dcompiler_47.dll) and add them to the working directory.'
+    - code: PipelineInit
+      category: integration_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'The GL pipeline rejected the resolution or extension set. Inspect the chained PipelineError.'
+    - code: PaletteRebake
+      category: integration_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'The palette LUT failed to upload. Reduce canvas size or check GL diagnostics.'
+    - code: Canvas
+      category: validation_error
+      recoverable: true
+      exit_code: 10
+      remediation: 'Zero or oversized canvas dimension. Adjust storyboard.width / .height.'
+    - code: FieldAlloc
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Out of memory when allocating the dummy Field. Reduce canvas dimensions.'
+    - code: FfmpegSpawn
+      category: integration_error
+      recoverable: false
+      exit_code: 6
+      remediation: 'ffmpeg is not on PATH. Install it (apt install ffmpeg or equivalent).'
+    - code: FfmpegStdin
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Internal error — please report. ffmpeg should always have produced a stdin handle.'
+    - code: FfmpegExit
+      category: integration_error
+      recoverable: false
+      exit_code: 1
+      remediation: 'ffmpeg exited non-zero. Re-run with stderr captured to see its diagnostics.'
+    - code: FfmpegWait
+      category: integration_error
+      recoverable: false
+      exit_code: 1
+      remediation: 'OS error while waiting for ffmpeg. Inspect stderr; likely process-tracking issue.'
+    - code: RenderFrame
+      category: integration_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'A specific frame failed to render. The chained PipelineError carries the GL diagnostic.'
+    - code: BackdropLayerMissing
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Internal bug — the backdrop layer was deleted mid-render. Please report.'
+    - code: BackdropEffectMissing
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Internal bug — the backdrop layer has no effect. Please report.'
+    - code: BackdropParamsShape
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Internal bug — backdrop params not a JSON object. Please report.'
+
+authority:
+  requires_filesystem: true
+  requires_network: false
+  requires_credentials: false
+  requires_process_execution: true       # spawns ffmpeg subprocess
+  requires_destructive_write: true       # output_path is overwritten without prompt (-y)
+  requires_telemetry: false
+  permission_behavior: declare
+  authority_types:
+    - filesystem_read   # storyboard, features, audio, karaoke ass
+    - filesystem_write  # output mp4
+    - process_execution # ffmpeg
+  notes: >
+    Filesystem and process execution are inherent to the capability. The renderer overwrites
+    the output file unconditionally (ffmpeg -y), which is the documented contract — the caller
+    is expected to choose an output path it owns. ffmpeg is invoked via PATH lookup; any
+    auditing of the binary itself happens outside this capability.
+
+lifecycle:
+  long_running: true
+  owner_scope: command
+  states:
+    - created                      # CLI command parsed
+    - inputs_loaded                # storyboard + features parsed and validated
+    - meta_ass_built               # combined ASS file written to disk
+    - gl_context_ready             # headless GL initialised, pipeline + palette baked
+    - ffmpeg_spawned               # ffmpeg child running, stdin piped
+    - rendering                    # per-frame loop active
+    - encoding                     # all frames piped; ffmpeg finalising
+    - completed                    # exit 0
+    - failed                       # any RenderError variant
+  cancellation: none               # currently no SIGINT handling
+  cleanup_required: true
+  cleanup_behavior: scope_exit     # GpuSession + ffmpeg child dropped at scope end; ffmpeg.wait() ensures the child is reaped
+  error_behavior: typed error
+
+interfaces:
+  cli:
+    exposed: true
+    command: art-engine-episode render <storyboard> --features <features.json> -o <output.mp4>
+    json_output_required: false   # not yet
+    stdin_supported: false
+    stdout_supported: true        # currently used only for the meta.ass build path; final summary on stderr
+    exit_codes:
+      - code: 0
+        meaning: success
+      - code: 1
+        meaning: ffmpeg exited non-zero or OS wait error
+      - code: 2
+        meaning: clap parser usage error (foundation policy)
+      - code: 3
+        meaning: invalid input (Storyboard / Features / FpsMismatch / NonUtf8Path / Canvas)
+      - code: 6
+        meaning: dependency unavailable (libEGL / ffmpeg not installed)
+      - code: 10
+        meaning: internal error (PipelineInit / RenderFrame / BackdropLayer*Missing / etc)
+    stdout_contract: 'human progress + final "done in Xs" line (currently). When --format json ships, stdout becomes machine-readable.'
+    stderr_contract: 'diagnostics, progress, errors. Never carries normal command output.'
+  desktop:
+    exposed: false
+  api:
+    exposed: false
+
+observability:
+  events:
+    - episode.render.started
+    - episode.scene.changed
+    - episode.frame.progress    # every 60 frames in current implementation
+    - episode.render.completed
+    - episode.render.failed
+  metrics:
+    - frames_rendered
+    - frames_total
+    - effective_fps
+    - render_seconds
+  logs:
+    - eprintln! line for each event (no structured tracing yet — queued)
+  secrets_redacted: true   # no secrets are touched by this capability
+
+acceptance_criteria:
+  - 'Storyboard with one Flow scene renders an mp4 of matching duration ± one frame.'
+  - 'Storyboard with multiple scenes produces visually distinct backdrops per scene.'
+  - 'Karaoke ASS subtitles merged from storyboard.subtitles appear in the output.'
+  - 'Storyboard header + sigil + scene_pips + corner brackets present from t=0 to t=duration.'
+  - 'Audio uniforms (u_rms, u_onset) drive Flow / Sun / Particles / Concentric / Halftone / Lattice / Branch backdrops.'
+  - 'Render produces no orphan ffmpeg child processes if the renderer exits successfully.'
+  - 'Each RenderError variant maps to its documented exit code.'
+
+required_tests:
+  - 'success path: 1-scene storyboard → mp4 of expected duration (currently manual; queued for automation)'
+  - 'invalid input: storyboard with overlapping scenes returns Storyboard error + exit 3 (covered by Storyboard::validate tests)'
+  - 'closed error set: RenderError exit_code() test (✓ landed 2026-05-11)'
+  - 'CLI JSON output test: not applicable yet; required when --format json ships'
+  - 'lifecycle cleanup test: not yet implemented'
+  - 'stdout/stderr separation test: not yet implemented'
+  - 'JSON schema compatibility test: not applicable yet'
+
+compatibility:
+  machine_output_schema: 'none yet; reserved for RenderEpisodeOutput when --format json ships'
+  breaking_change_requires: ADR
+  surfaces:
+    - 'Storyboard RON schema (Storyboard / Scene / Backdrop / Foreground / Transition / PostChain / HeaderSpec / SigilSpec / ScenePipsSpec / PipPosition / PaletteRef / Corner / ColorGrade)'
+    - 'RenderError variant names + exit codes (exposed to scripts via process exit)'
+    - 'extract_features.py output schema (features.json fields: fps, duration, n_frames, rms, onset, centroid)'

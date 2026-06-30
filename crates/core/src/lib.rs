@@ -21,6 +21,9 @@ pub mod seed;
 #[cfg(feature = "render")]
 pub mod render;
 
+#[cfg(feature = "render")]
+pub mod shaders;
+
 pub use canvas::{BlendMode, Canvas, ContentType, Layer};
 pub use color::{LinearRgb, OkLab, OkLch, Srgb};
 pub use engine::Engine;

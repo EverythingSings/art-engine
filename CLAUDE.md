@@ -187,8 +187,8 @@ This is necessary because screen-space effects need to sample neighboring pixels
 
 WebGL2 hardware blend modes cannot express multiply/screen/overlay. These require a shader that samples both the layer texture and the current composite texture, computes the blend mathematically, and writes the result. This means:
 
-- `blitFramebuffer` to copy composite before each layer blend (can't read and write same FBO)
-- Simple modes (normal, additive) can use hardware `gl.blendFunc` as fast path
+- The composite is copied into `composite_copy` before each layer's blend pass (can't read and write the same FBO).
+- V1 uses a shader pass for *all* five blend modes (Normal, Additive, Multiply, Screen, Overlay) so per-layer dispatch is a single uniform code path. The shader sources live in `crates/core/src/shaders/composite.rs`. A future optimisation can switch Normal/Additive to hardware `gl.blendFunc` as a fast path; the architecture supports it but V1 prioritises simplicity.
 
 ### Particle Trails
 

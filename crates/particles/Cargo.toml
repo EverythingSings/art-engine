@@ -1,0 +1,12 @@
+[package]
+name = "art-engine-particles"
+version = "0.1.0"
+edition = "2021"
+description = "Particle simulation engine for the art-engine, using the core ParticleSystem and FieldSource composable forces"
+
+[dependencies]
+art-engine-core = { path = "../core" }
+serde_json = "1"
+
+[dev-dependencies]
+proptest = "1"

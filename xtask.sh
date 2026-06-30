@@ -3,14 +3,15 @@
 # Usage: bash xtask.sh <command>
 #
 # Commands:
-#   check   - Full verification: fmt, clippy, test, doc, wasm
-#   test    - Run all workspace tests
-#   clippy  - Lint all crates
-#   fmt     - Format check (no writes)
-#   doc     - Build docs
-#   build   - Build all crates (native)
-#   wasm    - Build WASM target
-#   clean   - Remove build artifacts
+#   check        - Full verification: fmt, clippy, test, doc, wasm
+#   test         - Run all workspace tests
+#   clippy       - Lint all crates
+#   fmt          - Format check (no writes)
+#   doc          - Build docs
+#   build        - Build all crates (native)
+#   wasm         - Build WASM target
+#   visual-test  - Run GPU pipeline integration tests (requires headless EGL)
+#   clean        - Remove build artifacts
 
 set -euo pipefail
 
@@ -64,6 +65,18 @@ cmd_wasm() {
     cargo build -p art-engine-wasm --target wasm32-unknown-unknown && pass "wasm" || fail "wasm"
 }
 
+cmd_visual_test() {
+    # Phase 2 GPU pipeline tests. Requires headless EGL (Mesa, llvmpipe is fine).
+    # In CI we set ART_ENGINE_REQUIRE_GL=1 so a missing libEGL fails loudly
+    # rather than letting the tests silently skip.
+    step "cargo test (gpu pipeline)"
+    ART_ENGINE_REQUIRE_GL=1 cargo test -p art-engine-engines --features gpu \
+        && pass "visual-test (engines/gpu)" || fail "visual-test (engines/gpu)"
+    step "cargo test (core/native-gpu)"
+    ART_ENGINE_REQUIRE_GL=1 cargo test -p art-engine-core --features native-gpu \
+        && pass "visual-test (core/native-gpu)" || fail "visual-test (core/native-gpu)"
+}
+
 cmd_clean() {
     step "cargo clean"
     cargo clean
@@ -79,17 +92,18 @@ cmd_check() {
 }
 
 case "${1:-check}" in
-    check)  cmd_check ;;
-    test)   cmd_test "${2:-}" ;;
-    clippy) cmd_clippy ;;
-    fmt)    cmd_fmt ;;
-    doc)    cmd_doc ;;
-    build)  cmd_build ;;
-    wasm)   cmd_wasm ;;
-    clean)  cmd_clean ;;
+    check)        cmd_check ;;
+    test)         cmd_test "${2:-}" ;;
+    clippy)       cmd_clippy ;;
+    fmt)          cmd_fmt ;;
+    doc)          cmd_doc ;;
+    build)        cmd_build ;;
+    wasm)         cmd_wasm ;;
+    visual-test)  cmd_visual_test ;;
+    clean)        cmd_clean ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: bash xtask.sh {check|test|clippy|fmt|doc|build|wasm|clean}"
+        echo "Usage: bash xtask.sh {check|test|clippy|fmt|doc|build|wasm|visual-test|clean}"
         exit 1
         ;;
 esac

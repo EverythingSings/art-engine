@@ -4,3 +4,12 @@
 *~
 .DS_Store
 Thumbs.db
+target-wsl/
+video/
+*.mp4
+target/
+render_frames/
+*.mp4
+*.png
+renders/
+output/

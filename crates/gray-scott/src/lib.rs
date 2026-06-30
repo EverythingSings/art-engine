@@ -26,6 +26,8 @@ const DEFAULT_DIFFUSION_A: f64 = 1.0;
 const DEFAULT_DIFFUSION_B: f64 = 0.5;
 /// Default time step per `step()` call.
 const DEFAULT_DT: f64 = 1.0;
+/// Default per-step strength of the optional influence field.
+const DEFAULT_INFLUENCE_STRENGTH: f64 = 0.001;
 /// Spot radius in cells for initial V seeding.
 const SPOT_RADIUS: isize = 3;
 /// Fraction of total area used to determine spot count.
@@ -47,6 +49,11 @@ pub struct GrayScottParams {
     pub diffusion_b: f64,
     /// Time step per `step()` call.
     pub dt: f64,
+    /// Per-step gain applied to an externally-supplied influence field
+    /// (see [`Engine::set_influence`](art_engine_core::Engine::set_influence)).
+    /// Has no effect unless a field is set; controls how aggressively the
+    /// influence seeds new V (activator) into the chemistry each step.
+    pub influence_strength: f64,
 }
 
 impl Default for GrayScottParams {
@@ -57,6 +64,7 @@ impl Default for GrayScottParams {
             diffusion_a: DEFAULT_DIFFUSION_A,
             diffusion_b: DEFAULT_DIFFUSION_B,
             dt: DEFAULT_DT,
+            influence_strength: DEFAULT_INFLUENCE_STRENGTH,
         }
     }
 }
@@ -70,6 +78,8 @@ impl GrayScottParams {
             diffusion_a: param_f64(params, "diffusion_a", DEFAULT_DIFFUSION_A),
             diffusion_b: param_f64(params, "diffusion_b", DEFAULT_DIFFUSION_B),
             dt: param_f64(params, "dt", DEFAULT_DT),
+            influence_strength: param_f64(params, "influence_strength", DEFAULT_INFLUENCE_STRENGTH)
+                .max(0.0),
         }
     }
 }
@@ -87,6 +97,9 @@ pub struct GrayScott {
     u: Field,
     v: Field,
     params: GrayScottParams,
+    /// Optional external field whose values are additively blended into V
+    /// each `step()`. Set via [`Engine::set_influence`].
+    influence: Option<Field>,
 }
 
 impl GrayScott {
@@ -107,7 +120,12 @@ impl GrayScott {
         let mut v = Field::new(width, height)?;
         let mut rng = Xorshift64::new(seed);
         seed_initial_spots(&mut v, &mut rng, width, height);
-        Ok(Self { u, v, params })
+        Ok(Self {
+            u,
+            v,
+            params,
+            influence: None,
+        })
     }
 
     /// Creates a Gray-Scott engine from a JSON params object.
@@ -180,6 +198,19 @@ impl Engine for GrayScott {
         self.u.data_mut().copy_from_slice(&u_next);
         self.v.data_mut().copy_from_slice(&v_next);
 
+        // Influence injection: additively seed activator from the influence
+        // field, scaled by influence_strength. Clamps V to [0, 1] to keep
+        // the chemistry numerically valid.
+        if let Some(inf) = &self.influence {
+            let s = self.params.influence_strength;
+            if s > 0.0 {
+                for (vc, &ic) in self.v.data_mut().iter_mut().zip(inf.data().iter()) {
+                    let nv = (*vc + s * ic).clamp(0.0, 1.0);
+                    *vc = if nv.is_finite() { nv } else { *vc };
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -194,6 +225,7 @@ impl Engine for GrayScott {
             "diffusion_a": self.params.diffusion_a,
             "diffusion_b": self.params.diffusion_b,
             "dt": self.params.dt,
+            "influence_strength": self.params.influence_strength,
         })
     }
 
@@ -233,8 +265,22 @@ impl Engine for GrayScott {
                 "min": 0.0,
                 "max": 2.0,
                 "description": "Time step per step() call"
+            },
+            "influence_strength": {
+                "type": "number",
+                "default": DEFAULT_INFLUENCE_STRENGTH,
+                "min": 0.0,
+                "description": "Per-step gain on an external influence field (set via set_influence)"
             }
         })
+    }
+
+    fn set_influence(&mut self, field: &Field) -> Result<(), EngineError> {
+        if field.width() != self.v.width() || field.height() != self.v.height() {
+            return Err(EngineError::InvalidDimensions);
+        }
+        self.influence = Some(field.clone());
+        Ok(())
     }
 }
 
@@ -385,6 +431,7 @@ mod tests {
             diffusion_a: 0.9,
             diffusion_b: 0.4,
             dt: 0.7,
+            influence_strength: DEFAULT_INFLUENCE_STRENGTH,
         };
         let engine = GrayScott::new(16, 16, 42, params).unwrap();
         let p = engine.params();
@@ -656,6 +703,64 @@ mod tests {
         assert_eq!(boxed.field().width(), 16);
     }
 
+    // ---- Influence coupling ----
+
+    #[test]
+    fn set_influence_with_wrong_dims_returns_error() {
+        let mut e = gs(16, 16, 42);
+        let bad = Field::new(8, 8).unwrap();
+        assert!(e.set_influence(&bad).is_err());
+    }
+
+    #[test]
+    fn set_influence_with_zero_strength_is_no_op() {
+        // With influence_strength=0, set_influence should have no effect on
+        // the simulation evolution.
+        let p = GrayScottParams {
+            influence_strength: 0.0,
+            ..GrayScottParams::default()
+        };
+        let mut a = GrayScott::new(32, 32, 42, p).unwrap();
+        let mut b = GrayScott::new(32, 32, 42, p).unwrap();
+        let high_inf = Field::filled(32, 32, 1.0).unwrap();
+        b.set_influence(&high_inf).unwrap();
+        for _ in 0..30 {
+            a.step().unwrap();
+            b.step().unwrap();
+        }
+        // With strength=0, B should match A bit-for-bit.
+        assert!(a
+            .v_field()
+            .data()
+            .iter()
+            .zip(b.v_field().data().iter())
+            .all(|(va, vb)| va.to_bits() == vb.to_bits()));
+    }
+
+    #[test]
+    fn set_influence_increases_v_when_strength_positive() {
+        // With a strong positive influence, V should accumulate higher
+        // than without one over the same number of steps.
+        let p = GrayScottParams {
+            influence_strength: 0.05,
+            ..GrayScottParams::default()
+        };
+        let mut a = GrayScott::new(32, 32, 42, GrayScottParams::default()).unwrap();
+        let mut b = GrayScott::new(32, 32, 42, p).unwrap();
+        let high_inf = Field::filled(32, 32, 1.0).unwrap();
+        b.set_influence(&high_inf).unwrap();
+        for _ in 0..20 {
+            a.step().unwrap();
+            b.step().unwrap();
+        }
+        let sum_a: f64 = a.v_field().data().iter().sum();
+        let sum_b: f64 = b.v_field().data().iter().sum();
+        assert!(
+            sum_b > sum_a,
+            "influence-driven V should exceed control: sum_a={sum_a}, sum_b={sum_b}"
+        );
+    }
+
     // ---- Property-based tests ----
 
     mod proptests {
@@ -680,6 +785,7 @@ mod tests {
                     diffusion_a: da,
                     diffusion_b: db,
                     dt,
+                    influence_strength: DEFAULT_INFLUENCE_STRENGTH,
                 })
         }
 

@@ -1,0 +1,27 @@
+[package]
+name = "art-engine-episode"
+version = "0.1.0"
+edition = "2021"
+description = "Episode rendering CLI: audio + storyboard → mp4"
+
+[[bin]]
+name = "art-engine-episode"
+path = "src/main.rs"
+
+[features]
+default = ["gpu"]
+# Pulls in art-engine-core's native EGL pipeline. Disable to build the
+# CLI without the renderer (e.g. on platforms lacking libEGL).
+gpu = ["art-engine-core/native-gpu"]
+
+[dependencies]
+art-engine-core = { path = "../core" }
+art-engine-storyboard = { path = "../storyboard" }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.8"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

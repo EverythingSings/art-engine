@@ -1,0 +1,203 @@
+id: CAP-PLAN-EPISODE
+name: Plan Episode
+status: draft
+version: 0.1.0
+stability: provisional
+description: >
+  Validate a storyboard.ron file and emit a typed summary describing the timeline an
+  agent or operator would render. Read-only: never touches the GPU, never writes mp4,
+  never invokes ffmpeg. Used as a cheap pre-flight before `render-episode` and as the
+  agent-facing introspection surface for a storyboard.
+rationale: >
+  Renderers are expensive (100+ seconds even for short episodes); the planning step
+  is sub-second. Surfacing the planned timeline as a stable JSON document lets
+  scripts and agents reason about a storyboard — count scenes, check backdrop choices,
+  validate fps/dimensions, locate the karaoke ASS — without launching the renderer.
+
+actors:
+  - cli
+  - agent
+
+inputs:
+  schema_name: PlanEpisodeRequest
+  fields:
+    - name: storyboard_path
+      type: Path
+      required: true
+      description: 'Path to the storyboard.ron file.'
+    - name: format
+      type: enum { Human, Json }
+      required: false
+      default: Human
+      description: 'Output shape. Human = a brief table for operators. Json = a `PlanReport` document for scripts/agents.'
+  validation_rules:
+    - 'storyboard_path must parse as RON and pass Storyboard::validate'
+
+outputs:
+  schema_name: PlanReport
+  schema_version: 1
+  fields:
+    - name: schema_version
+      type: u32
+      description: 'Increments on any breaking change to this shape. Currently 1.'
+    - name: storyboard_path
+      type: Path
+    - name: audio_path
+      type: Path
+      description: 'storyboard.audio, as-written (may be relative to the storyboard).'
+    - name: subtitles_path
+      type: Path | null
+    - name: fps
+      type: u32
+    - name: width
+      type: u32
+    - name: height
+      type: u32
+    - name: duration_s
+      type: f32
+      description: 'storyboard.duration() — the maximum scene-end across all scenes.'
+    - name: frame_count
+      type: u32
+      description: 'round(duration_s * fps).'
+    - name: scene_count
+      type: usize
+    - name: has_header
+      type: bool
+    - name: has_sigil
+      type: bool
+    - name: has_scene_pips
+      type: bool
+    - name: scenes
+      type: 'ScenePlan[]'
+      description: 'Compact summary per scene; see ScenePlan below.'
+
+  scene_plan_schema:
+    fields:
+      - name: idx
+        type: u32
+      - name: start_s
+        type: f32
+      - name: end_s
+        type: f32
+      - name: duration_s
+        type: f32
+      - name: backdrop
+        type: string
+        description: 'Stable short name from `short_backdrop`. One of: Flow, Solid, Voronoi, NoiseStatic, Lattice, Mandala, Concentric, Strands, Wave, Spiral, Halftone, Crosshatch, Topo, Aurora, Sun, Particles, Branch.'
+      - name: transition_in
+        type: string
+        description: 'One of: HardCut, Crossfade, GlitchBreak.'
+      - name: foreground_count
+        type: usize
+      - name: foreground_kinds
+        type: 'string[]'
+        description: 'Foreground variants present. One of: KaraokeCaptions, TitleCard, PullQuote, EndCard.'
+      - name: has_post
+        type: bool
+
+  formats:
+    human_readable:
+      contract: |
+        A brief multiline summary on stdout. Stable enough for documentation but not a
+        parseable surface. Form:
+          loaded <path>: <N> scenes, <D>s @ <fps>fps, <W>x<H>
+            [  i] <start>s → <end>s (<dur>s)  backdrop="<name>"  fg=<count>
+            ...
+          frame_count=<N>
+    json:
+      contract: |
+        One complete JSON document on stdout, no trailing newline beyond `println!`.
+        Field order matches the struct definition. Pretty-printed (2-space indent).
+        Schema versioned via top-level `schema_version`.
+
+errors:
+  closed_set:
+    - code: StoryboardLoad
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: 'Fix the storyboard.ron parse / validation error and retry.'
+    - code: SerialiseReport
+      category: internal_error
+      recoverable: false
+      exit_code: 10
+      remediation: 'Internal — serde failed to serialise PlanReport. Please report.'
+
+authority:
+  requires_filesystem: true
+  requires_network: false
+  requires_credentials: false
+  requires_process_execution: false
+  requires_destructive_write: false
+  requires_telemetry: false
+  permission_behavior: declare
+  authority_types:
+    - filesystem_read
+  notes: 'Reads the storyboard.ron and nothing else. No side effects.'
+
+lifecycle:
+  long_running: false
+  owner_scope: command
+  states:
+    - created
+    - loaded
+    - serialised
+    - completed
+    - failed
+  cancellation: none
+  cleanup_required: false
+  cleanup_behavior: none
+  error_behavior: typed error
+
+interfaces:
+  cli:
+    exposed: true
+    command: 'art-engine-episode plan <storyboard> [--format human|json]'
+    json_output_required: true
+    stdin_supported: false
+    stdout_supported: true
+    exit_codes:
+      - code: 0
+        meaning: success
+      - code: 2
+        meaning: clap parser usage error
+      - code: 3
+        meaning: storyboard parse / validation failure (StoryboardLoad)
+      - code: 10
+        meaning: internal serialisation failure
+    stdout_contract: 'Either the human table OR the JSON document. Never mixed.'
+    stderr_contract: 'Errors and diagnostics only. Empty on the success path.'
+  desktop:
+    exposed: false
+  api:
+    exposed: false
+
+observability:
+  events: []
+  metrics: []
+  logs: []
+  secrets_redacted: true
+
+acceptance_criteria:
+  - 'plan exits 0 on a valid storyboard, 3 on an invalid one'
+  - 'JSON output contains schema_version, scene_count, fps, width, height, frame_count'
+  - 'Every scene appears in scenes[] with idx, start_s, end_s, backdrop, transition_in'
+  - 'foreground_kinds enumerates every Foreground variant the storyboard uses'
+  - 'has_header / has_sigil / has_scene_pips reflect the top-level Storyboard fields'
+  - 'Human format keeps stable line shape for documentation'
+
+required_tests:
+  - 'success path: build_plan(known.ron) returns expected scene_count + backdrop names ✓ (landed 2026-05-11)'
+  - 'json schema version is asserted in the test ✓ (guards LAW-012)'
+  - 'short_backdrop covers every Backdrop variant ✓ (regression test against silently dropping a variant)'
+  - 'invalid storyboard exits 3: not yet wired as a CLI snapshot test'
+  - 'stdout/stderr separation: not yet wired as a CLI snapshot test'
+
+compatibility:
+  machine_output_schema: 'PlanReport v1'
+  breaking_change_requires: ADR or capability version bump
+  surfaces:
+    - 'Top-level `PlanReport` field names + types'
+    - 'ScenePlan field names + types'
+    - 'short_backdrop / short_foreground / short_transition output strings'
+    - 'CLI exit codes (0/2/3/10)'

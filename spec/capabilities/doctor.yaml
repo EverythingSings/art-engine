@@ -1,0 +1,177 @@
+id: CAP-DOCTOR
+name: Doctor
+status: draft
+version: 0.1.0
+stability: provisional
+description: >
+  Probe environment readiness for `render-episode`: confirm ffmpeg is on PATH,
+  libEGL loads, the headless GL pipeline initialises, and the temp directory
+  is writable. Each probe runs independently — one failing doesn't prevent
+  the others from reporting — so a single invocation lists every problem at
+  once.
+rationale: >
+  ADR-001 documents the WSL/libEGL packaging constraint but doesn't give
+  developers a way to verify their setup. This capability is the
+  pre-flight check: "can my machine render?" Pairs with `plan-episode`
+  (which asks "is my storyboard valid?") to cover both halves of the
+  render readiness question.
+
+actors:
+  - cli
+  - agent
+
+inputs:
+  schema_name: DoctorRequest
+  fields:
+    - name: format
+      type: enum { Human, Json }
+      required: false
+      default: Human
+      description: 'Output shape. Human = a short marked-up table on stdout. Json = a `DoctorReport` document.'
+
+outputs:
+  schema_name: DoctorReport
+  schema_version: 1
+  fields:
+    - name: schema_version
+      type: u32
+    - name: overall_ok
+      type: bool
+      description: 'True iff every probe succeeded. Maps to exit code 0; failure maps to 6.'
+    - name: probes
+      type: 'Probe[]'
+
+  probe_schema:
+    fields:
+      - name: name
+        type: string
+        description: 'Stable snake_case identifier. One of: ffmpeg, libegl, gl_pipeline, tempdir_write.'
+      - name: ok
+        type: bool
+      - name: message
+        type: string
+        description: 'One-line summary. Includes version strings on success, error messages on failure.'
+      - name: remediation
+        type: string | null
+        description: 'Next-action hint when ok=false. Always null on success.'
+
+  formats:
+    human_readable:
+      contract: |
+        Multiline output on stdout. First line: "art-engine-episode doctor — <OK|PROBLEMS>".
+        Per-probe lines marked with ✓ or ✗ and the probe name/message. Remediation hints
+        indented under failing probes with "→".
+    json:
+      contract: |
+        One complete JSON document on stdout. `schema_version` at the top level.
+        Field order matches the struct definition. Pretty-printed (2-space indent).
+
+  probes:
+    - name: ffmpeg
+      what: 'Runs `ffmpeg -version` as a subprocess.'
+      success: 'Returns ffmpeg version line.'
+      failure: 'ffmpeg not on PATH or returned non-zero exit.'
+    - name: libegl
+      gated: 'gpu feature only'
+      what: 'Calls `art_engine_core::render::headless::create_headless_context()`.'
+      success: 'libEGL loaded + context created.'
+      failure: 'libEGL absent (Windows native) or DRI3/Mesa unavailable.'
+    - name: gl_pipeline
+      gated: 'gpu feature only'
+      what: 'Allocates a 64x64 `Pipeline` against the headless context.'
+      success: 'Pipeline initialised; shaders compiled.'
+      failure: 'GL extension or driver issue.'
+      skipped_when: 'libegl probe failed (avoid double-reporting).'
+    - name: tempdir_write
+      what: 'Writes + deletes a sentinel file in std::env::temp_dir().'
+      success: 'Temp directory writable.'
+      failure: 'Permission denied, disk full, or TMPDIR misconfigured.'
+
+errors:
+  closed_set: []
+  # Doctor doesn't fail in the typed-error sense — it reports per-probe status
+  # and exits 0/6 based on aggregate. A truly unrecoverable error (e.g. serde
+  # failure on JSON output) exits 10.
+  notes: |
+    The command treats probe failure as data, not error. Exit code 6 signals
+    "environment not ready" so scripts can branch on `doctor && render`.
+
+authority:
+  requires_filesystem: true       # writes a sentinel file to temp dir
+  requires_network: false
+  requires_credentials: false
+  requires_process_execution: true # spawns ffmpeg -version
+  requires_destructive_write: false
+  requires_telemetry: false
+  permission_behavior: declare
+  authority_types:
+    - filesystem_read
+    - filesystem_write   # one tiny file in temp dir
+    - process_execution  # ffmpeg subprocess
+  notes: >
+    Writes are limited to a single short-lived sentinel file under the temp
+    directory; the file is removed before the probe returns. ffmpeg is only
+    asked for its version string — no rendering or file output happens.
+
+lifecycle:
+  long_running: false
+  owner_scope: command
+  states:
+    - created
+    - probing
+    - completed
+  cancellation: none
+  cleanup_required: true
+  cleanup_behavior: best_effort   # tempdir sentinel is best-effort-deleted
+  error_behavior: typed error
+
+interfaces:
+  cli:
+    exposed: true
+    command: 'art-engine-episode doctor [--format human|json]'
+    json_output_required: true
+    stdin_supported: false
+    stdout_supported: true
+    exit_codes:
+      - code: 0
+        meaning: all probes passed
+      - code: 2
+        meaning: clap parser usage error
+      - code: 6
+        meaning: one or more probes failed (unavailable dependency)
+      - code: 10
+        meaning: internal serialisation failure (should not happen)
+    stdout_contract: 'Either the human marked-up table OR the JSON document. Never mixed.'
+    stderr_contract: 'Empty on the success path. May surface libEGL warnings from Mesa on the failure path; these are noise, not the command output.'
+  desktop:
+    exposed: false
+  api:
+    exposed: false
+
+observability:
+  events: []
+  metrics: []
+  logs: []
+  secrets_redacted: true
+
+acceptance_criteria:
+  - 'doctor exits 0 when run inside WSL with Mesa libEGL available'
+  - 'doctor exits 6 when libEGL is unavailable (Windows native without ANGLE)'
+  - 'doctor reports the missing ffmpeg case with a remediation pointing at install instructions'
+  - 'doctor JSON output contains schema_version + overall_ok + per-probe results'
+  - 'No probe panics; each failure is surfaced as a structured Probe entry'
+
+required_tests:
+  - 'tempdir probe passes in the test runner ✓ (landed 2026-05-11)'
+  - 'human format marks failing probes with ✗ and shows remediation ✓ (landed)'
+  - 'exit_code returns 0 for overall_ok, 6 otherwise ✓ (landed)'
+  - 'JSON serialisation includes schema_version ✓ (landed)'
+  - 'CLI snapshot test for doctor output: not yet wired'
+
+compatibility:
+  machine_output_schema: 'DoctorReport v1'
+  breaking_change_requires: ADR or capability version bump
+  surfaces:
+    - 'DoctorReport field names + types'
+    - 'Probe.name strings (ffmpeg, libegl, gl_pipeline, tempdir_write)'
+    - 'CLI exit codes (0/2/6/10)'

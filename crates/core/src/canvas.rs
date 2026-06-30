@@ -13,7 +13,7 @@ use crate::error::EngineError;
 ///
 /// `Normal` and `Additive` can use hardware `gl.blendFunc` as a fast path.
 /// `Multiply`, `Screen`, and `Overlay` require shader-based compositing.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BlendMode {
     #[default]
@@ -33,10 +33,43 @@ pub enum ContentType {
     Field,
 }
 
+/// A reference to a built-in shader/effect with JSON-encoded uniform parameters.
+///
+/// `name` is matched against the built-in shader registry
+/// (e.g. `"bloom"`, `"kaleidoscope"`, `"vignette"`). `params` is a JSON object
+/// whose keys correspond to the shader's declared uniform names. Missing keys
+/// fall back to the shader's documented defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ShaderEffectDesc {
+    pub name: String,
+    #[serde(default = "default_params")]
+    pub params: serde_json::Value,
+}
+
+fn default_params() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
+impl ShaderEffectDesc {
+    /// Creates a new effect descriptor with the given name and JSON params.
+    pub fn new(name: impl Into<String>, params: serde_json::Value) -> Self {
+        Self {
+            name: name.into(),
+            params,
+        }
+    }
+
+    /// Creates a new effect descriptor with default (empty) params.
+    pub fn with_defaults(name: impl Into<String>) -> Self {
+        Self::new(name, default_params())
+    }
+}
+
 /// A single layer in the canvas stack.
 ///
 /// Layers are identified by unique names within a [`Canvas`]. Each layer has
-/// a blend mode, opacity, visibility flag, and content type.
+/// a blend mode, opacity, visibility flag, content type, and an ordered chain
+/// of per-layer shader effects applied before compositing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Layer {
     name: String,
@@ -44,6 +77,8 @@ pub struct Layer {
     opacity: f64,
     visible: bool,
     content_type: ContentType,
+    #[serde(default)]
+    effects: Vec<ShaderEffectDesc>,
 }
 
 impl Layer {
@@ -57,6 +92,7 @@ impl Layer {
             opacity: 1.0,
             visible: true,
             content_type,
+            effects: Vec::new(),
         }
     }
 
@@ -117,6 +153,29 @@ impl Layer {
         self.visible = visible;
         self
     }
+
+    /// Returns the per-layer effect chain (applied in order before compositing).
+    pub fn effects(&self) -> &[ShaderEffectDesc] {
+        &self.effects
+    }
+
+    /// Returns the per-layer effect chain mutably so callers can rewrite
+    /// the JSON params of an effect between frames (e.g. updating
+    /// `u_time` or audio-feature uniforms in a per-frame render loop).
+    pub fn effects_mut(&mut self) -> &mut [ShaderEffectDesc] {
+        &mut self.effects
+    }
+
+    /// Appends an effect to the layer's effect chain.
+    pub fn push_effect(&mut self, effect: ShaderEffectDesc) {
+        self.effects.push(effect);
+    }
+
+    /// Returns a new layer with the given effect appended to its chain.
+    pub fn with_effect(mut self, effect: ShaderEffectDesc) -> Self {
+        self.effects.push(effect);
+        self
+    }
 }
 
 /// A canvas with dimensions, background color, and an ordered layer stack.
@@ -129,6 +188,8 @@ pub struct Canvas {
     height: usize,
     background: Srgb,
     layers: Vec<Layer>,
+    #[serde(default)]
+    post_stack: Vec<ShaderEffectDesc>,
 }
 
 impl Canvas {
@@ -148,6 +209,7 @@ impl Canvas {
             height,
             background,
             layers: Vec::new(),
+            post_stack: Vec::new(),
         })
     }
 
@@ -268,6 +330,27 @@ impl Canvas {
             .iter()
             .position(|l| l.name == name)
             .ok_or_else(|| EngineError::LayerNotFound(name.to_string()))
+    }
+
+    /// Returns the post-processing effect stack (applied in order after compositing).
+    pub fn post_stack(&self) -> &[ShaderEffectDesc] {
+        &self.post_stack
+    }
+
+    /// Appends a post-processing effect to the stack.
+    pub fn push_post(&mut self, effect: ShaderEffectDesc) {
+        self.post_stack.push(effect);
+    }
+
+    /// Clears the post-processing effect stack.
+    pub fn clear_post_stack(&mut self) {
+        self.post_stack.clear();
+    }
+
+    /// Returns a new canvas with the given post-processing effect appended.
+    pub fn with_post(mut self, effect: ShaderEffectDesc) -> Self {
+        self.post_stack.push(effect);
+        self
     }
 }
 
@@ -762,6 +845,146 @@ mod tests {
     fn layers_iter_empty_canvas() {
         let canvas = Canvas::new(100, 100, black()).unwrap();
         assert_eq!(canvas.layers().iter().count(), 0);
+    }
+
+    // ── ShaderEffectDesc tests ─────────────────────────────────────
+
+    #[test]
+    fn shader_effect_desc_with_defaults_is_empty_object() {
+        let fx = ShaderEffectDesc::with_defaults("bloom");
+        assert_eq!(fx.name, "bloom");
+        assert!(fx.params.is_object());
+        assert_eq!(fx.params.as_object().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn shader_effect_desc_serde_round_trip() {
+        let fx =
+            ShaderEffectDesc::new("bloom", serde_json::json!({"intensity": 0.6, "radius": 12}));
+        let json = serde_json::to_string(&fx).unwrap();
+        let back: ShaderEffectDesc = serde_json::from_str(&json).unwrap();
+        assert_eq!(fx, back);
+    }
+
+    #[test]
+    fn shader_effect_desc_deserializes_without_params_field() {
+        // Old/minimal JSON omits the params key entirely.
+        let json = r#"{"name":"vignette"}"#;
+        let fx: ShaderEffectDesc = serde_json::from_str(json).unwrap();
+        assert_eq!(fx.name, "vignette");
+        assert!(fx.params.is_object());
+    }
+
+    // ── Layer effects tests ────────────────────────────────────────
+
+    #[test]
+    fn layer_new_has_empty_effects() {
+        let layer = Layer::new("bg", ContentType::Field);
+        assert!(layer.effects().is_empty());
+    }
+
+    #[test]
+    fn layer_with_effect_appends() {
+        let layer = Layer::new("fx", ContentType::Particles)
+            .with_effect(ShaderEffectDesc::with_defaults("kaleidoscope"))
+            .with_effect(ShaderEffectDesc::new(
+                "voronoi",
+                serde_json::json!({"scale": 8.0}),
+            ));
+        assert_eq!(layer.effects().len(), 2);
+        assert_eq!(layer.effects()[0].name, "kaleidoscope");
+        assert_eq!(layer.effects()[1].name, "voronoi");
+    }
+
+    #[test]
+    fn layer_push_effect_mutates_in_place() {
+        let mut layer = Layer::new("fx", ContentType::Field);
+        layer.push_effect(ShaderEffectDesc::with_defaults("feedback"));
+        assert_eq!(layer.effects().len(), 1);
+        assert_eq!(layer.effects()[0].name, "feedback");
+    }
+
+    #[test]
+    fn layer_serde_preserves_effects() {
+        let layer = Layer::new("deep", ContentType::Particles)
+            .with_blend_mode(BlendMode::Additive)
+            .with_effect(ShaderEffectDesc::new(
+                "kaleidoscope",
+                serde_json::json!({"segments": 6}),
+            ));
+        let json = serde_json::to_string(&layer).unwrap();
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(layer, back);
+    }
+
+    #[test]
+    fn layer_deserializes_legacy_json_without_effects_field() {
+        // JSON predating the effects field must still deserialize.
+        let json = r#"{"name":"old","blend_mode":"normal","opacity":1.0,"visible":true,"content_type":"field"}"#;
+        let layer: Layer = serde_json::from_str(json).unwrap();
+        assert_eq!(layer.name(), "old");
+        assert!(layer.effects().is_empty());
+    }
+
+    // ── Canvas post-stack tests ────────────────────────────────────
+
+    #[test]
+    fn canvas_new_has_empty_post_stack() {
+        let canvas = Canvas::new(100, 100, black()).unwrap();
+        assert!(canvas.post_stack().is_empty());
+    }
+
+    #[test]
+    fn canvas_with_post_appends() {
+        let canvas = Canvas::new(100, 100, black())
+            .unwrap()
+            .with_post(ShaderEffectDesc::new(
+                "bloom",
+                serde_json::json!({"intensity": 0.6}),
+            ))
+            .with_post(ShaderEffectDesc::with_defaults("vignette"));
+        assert_eq!(canvas.post_stack().len(), 2);
+        assert_eq!(canvas.post_stack()[0].name, "bloom");
+        assert_eq!(canvas.post_stack()[1].name, "vignette");
+    }
+
+    #[test]
+    fn canvas_push_post_mutates_in_place() {
+        let mut canvas = Canvas::new(100, 100, black()).unwrap();
+        canvas.push_post(ShaderEffectDesc::with_defaults("grain"));
+        canvas.push_post(ShaderEffectDesc::with_defaults("vignette"));
+        assert_eq!(canvas.post_stack().len(), 2);
+    }
+
+    #[test]
+    fn canvas_clear_post_stack_empties() {
+        let mut canvas = Canvas::new(100, 100, black()).unwrap();
+        canvas.push_post(ShaderEffectDesc::with_defaults("bloom"));
+        canvas.clear_post_stack();
+        assert!(canvas.post_stack().is_empty());
+    }
+
+    #[test]
+    fn canvas_serde_preserves_post_stack() {
+        let canvas = Canvas::new(256, 256, black())
+            .unwrap()
+            .with_post(ShaderEffectDesc::new(
+                "bloom",
+                serde_json::json!({"intensity": 0.6, "radius": 12}),
+            ))
+            .with_post(ShaderEffectDesc::with_defaults("grain"));
+        let json = serde_json::to_string(&canvas).unwrap();
+        let back: Canvas = serde_json::from_str(&json).unwrap();
+        assert_eq!(canvas, back);
+    }
+
+    #[test]
+    fn canvas_deserializes_legacy_json_without_post_stack() {
+        // Older canvas JSON had no post_stack key.
+        let json = r##"{"width":100,"height":100,"background":"#000000","layers":[]}"##;
+        let canvas: Canvas = serde_json::from_str(json).unwrap();
+        assert_eq!(canvas.width(), 100);
+        assert!(canvas.post_stack().is_empty());
     }
 
     // ── Property-based tests ───────────────────────────────────────

@@ -13,6 +13,13 @@ members = [
     "crates/ising",
     "crates/dla",
     "crates/attractor",
+    "crates/mandelbrot",
+    "crates/particles",
+    "crates/differential",
+    "crates/storyboard",
+    "crates/episode",
+    "crates/explorer",
+    "crates/excitable",
 ]
 default-members = [
     "crates/core",
@@ -26,6 +33,12 @@ default-members = [
     "crates/ising",
     "crates/dla",
     "crates/attractor",
+    "crates/mandelbrot",
+    "crates/particles",
+    "crates/differential",
+    "crates/storyboard",
+    "crates/episode",
+    "crates/excitable",
 ]
 
 [profile.release]

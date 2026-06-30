@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 description = "CLI binary for the art-engine"
 
+[features]
+default = ["gpu"]
+# Enables --gpu / --shader / --post flags backed by the headless EGL pipeline.
+# Disable with `--no-default-features` to build a CPU-only CLI.
+gpu = ["art-engine-engines/gpu"]
+
 [dependencies]
 art-engine-core = { path = "../core" }
 art-engine-engines = { path = "../engines" }

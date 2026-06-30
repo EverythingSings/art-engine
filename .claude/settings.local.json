@@ -4,7 +4,8 @@
       "Bash(test:*)",
       "Bash(rustc *)",
       "Bash(cargo *)",
-      "Bash(make)"
+      "Bash(make)",
+      "Bash(git:*)"
     ]
   }
 }

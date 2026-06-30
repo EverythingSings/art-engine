@@ -38,6 +38,22 @@ pub trait Engine {
     fn hue_field(&self) -> Option<&Field> {
         None
     }
+
+    /// Sets a per-pixel influence field that the engine may use to modulate
+    /// its next `step()`. The exact meaning is engine-specific:
+    ///
+    /// - Gray-Scott: additively seeds the V (activator) channel
+    /// - Physarum: additively seeds the raw pheromone trail
+    /// - Particles: applies the field's gradient as an extra force
+    /// - (others ignore by default)
+    ///
+    /// The provided field's dimensions must match the engine's, otherwise the
+    /// engine returns `EngineError::InvalidDimensions`. The field is sampled
+    /// during the next `step()` call; engines that buffer it internally must
+    /// document that behavior. Default implementation: ignore (no-op).
+    fn set_influence(&mut self, _field: &Field) -> Result<(), EngineError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

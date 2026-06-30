@@ -11,13 +11,27 @@ pub mod pixel;
 #[cfg(feature = "png")]
 pub mod snapshot;
 
+#[cfg(feature = "gpu")]
+pub mod gpu_snapshot;
+
 use art_engine_core::error::EngineError;
 use art_engine_core::field::Field;
 use art_engine_core::Engine;
 use serde_json::Value;
 
 /// All available engine names.
-const ENGINE_NAMES: &[&str] = &["gray-scott"];
+const ENGINE_NAMES: &[&str] = &[
+    "gray-scott",
+    "physarum",
+    "mandelbrot",
+    "particles",
+    "dla",
+    "attractor",
+    "ising",
+    "differential",
+    "quantum",
+    "excitable",
+];
 
 /// Enumeration of all available generative art engines.
 ///
@@ -26,6 +40,24 @@ const ENGINE_NAMES: &[&str] = &["gray-scott"];
 pub enum EngineKind {
     /// Gray-Scott reaction-diffusion.
     GrayScott(art_engine_gray_scott::GrayScott),
+    /// Physarum polycephalum slime mold.
+    Physarum(art_engine_physarum::Physarum),
+    /// Mandelbrot escape-time fractal.
+    Mandelbrot(art_engine_mandelbrot::Mandelbrot),
+    /// CPU particle simulation with composable FieldSource forces.
+    Particles(art_engine_particles::Particles),
+    /// Diffusion-limited aggregation (random-walking sticking particles).
+    Dla(art_engine_dla::Dla),
+    /// Strange attractors (Lorenz / Rössler / Halvorsen / Pickover).
+    Attractor(art_engine_attractor::Attractor),
+    /// 2D Ising model (statistical mechanics).
+    Ising(art_engine_ising::Ising),
+    /// Differential growth (self-organizing polyline).
+    Differential(art_engine_differential::Differential),
+    /// 2D quantum walk (Hadamard / Grover / DFT coins).
+    Quantum(art_engine_quantum::Quantum),
+    /// Barkley excitable media (rotating spiral and target waves).
+    Excitable(art_engine_excitable::Excitable),
 }
 
 impl EngineKind {
@@ -43,6 +75,33 @@ impl EngineKind {
             "gray-scott" => Ok(EngineKind::GrayScott(
                 art_engine_gray_scott::GrayScott::from_json(width, height, seed, params)?,
             )),
+            "physarum" => Ok(EngineKind::Physarum(
+                art_engine_physarum::Physarum::from_json(width, height, seed, params)?,
+            )),
+            "mandelbrot" => Ok(EngineKind::Mandelbrot(
+                art_engine_mandelbrot::Mandelbrot::from_json(width, height, seed, params)?,
+            )),
+            "particles" => Ok(EngineKind::Particles(
+                art_engine_particles::Particles::from_json(width, height, seed, params)?,
+            )),
+            "dla" => Ok(EngineKind::Dla(art_engine_dla::Dla::from_json(
+                width, height, seed, params,
+            )?)),
+            "attractor" => Ok(EngineKind::Attractor(
+                art_engine_attractor::Attractor::from_json(width, height, seed, params)?,
+            )),
+            "ising" => Ok(EngineKind::Ising(art_engine_ising::Ising::from_json(
+                width, height, seed, params,
+            )?)),
+            "differential" => Ok(EngineKind::Differential(
+                art_engine_differential::Differential::from_json(width, height, seed, params)?,
+            )),
+            "quantum" => Ok(EngineKind::Quantum(art_engine_quantum::Quantum::from_json(
+                width, height, seed, params,
+            )?)),
+            "excitable" => Ok(EngineKind::Excitable(
+                art_engine_excitable::Excitable::from_json(width, height, seed, params)?,
+            )),
             _ => Err(EngineError::UnknownEngine(name.to_string())),
         }
     }
@@ -57,30 +116,90 @@ impl Engine for EngineKind {
     fn step(&mut self) -> Result<(), EngineError> {
         match self {
             EngineKind::GrayScott(e) => e.step(),
+            EngineKind::Physarum(e) => e.step(),
+            EngineKind::Mandelbrot(e) => e.step(),
+            EngineKind::Particles(e) => e.step(),
+            EngineKind::Dla(e) => e.step(),
+            EngineKind::Attractor(e) => e.step(),
+            EngineKind::Ising(e) => e.step(),
+            EngineKind::Differential(e) => e.step(),
+            EngineKind::Quantum(e) => e.step(),
+            EngineKind::Excitable(e) => e.step(),
         }
     }
 
     fn field(&self) -> &Field {
         match self {
             EngineKind::GrayScott(e) => e.field(),
+            EngineKind::Physarum(e) => e.field(),
+            EngineKind::Mandelbrot(e) => e.field(),
+            EngineKind::Particles(e) => e.field(),
+            EngineKind::Dla(e) => e.field(),
+            EngineKind::Attractor(e) => e.field(),
+            EngineKind::Ising(e) => e.field(),
+            EngineKind::Differential(e) => e.field(),
+            EngineKind::Quantum(e) => e.field(),
+            EngineKind::Excitable(e) => e.field(),
         }
     }
 
     fn params(&self) -> Value {
         match self {
             EngineKind::GrayScott(e) => e.params(),
+            EngineKind::Physarum(e) => e.params(),
+            EngineKind::Mandelbrot(e) => e.params(),
+            EngineKind::Particles(e) => e.params(),
+            EngineKind::Dla(e) => e.params(),
+            EngineKind::Attractor(e) => e.params(),
+            EngineKind::Ising(e) => e.params(),
+            EngineKind::Differential(e) => e.params(),
+            EngineKind::Quantum(e) => e.params(),
+            EngineKind::Excitable(e) => e.params(),
         }
     }
 
     fn param_schema(&self) -> Value {
         match self {
             EngineKind::GrayScott(e) => e.param_schema(),
+            EngineKind::Physarum(e) => e.param_schema(),
+            EngineKind::Mandelbrot(e) => e.param_schema(),
+            EngineKind::Particles(e) => e.param_schema(),
+            EngineKind::Dla(e) => e.param_schema(),
+            EngineKind::Attractor(e) => e.param_schema(),
+            EngineKind::Ising(e) => e.param_schema(),
+            EngineKind::Differential(e) => e.param_schema(),
+            EngineKind::Quantum(e) => e.param_schema(),
+            EngineKind::Excitable(e) => e.param_schema(),
         }
     }
 
     fn hue_field(&self) -> Option<&Field> {
         match self {
             EngineKind::GrayScott(e) => e.hue_field(),
+            EngineKind::Physarum(e) => e.hue_field(),
+            EngineKind::Mandelbrot(e) => e.hue_field(),
+            EngineKind::Particles(e) => e.hue_field(),
+            EngineKind::Dla(e) => e.hue_field(),
+            EngineKind::Attractor(e) => e.hue_field(),
+            EngineKind::Ising(e) => e.hue_field(),
+            EngineKind::Differential(e) => e.hue_field(),
+            EngineKind::Quantum(e) => e.hue_field(),
+            EngineKind::Excitable(e) => e.hue_field(),
+        }
+    }
+
+    fn set_influence(&mut self, field: &Field) -> Result<(), EngineError> {
+        match self {
+            EngineKind::GrayScott(e) => e.set_influence(field),
+            EngineKind::Physarum(e) => e.set_influence(field),
+            EngineKind::Mandelbrot(e) => e.set_influence(field),
+            EngineKind::Particles(e) => e.set_influence(field),
+            EngineKind::Dla(e) => e.set_influence(field),
+            EngineKind::Attractor(e) => e.set_influence(field),
+            EngineKind::Ising(e) => e.set_influence(field),
+            EngineKind::Differential(e) => e.set_influence(field),
+            EngineKind::Quantum(e) => e.set_influence(field),
+            EngineKind::Excitable(e) => e.set_influence(field),
         }
     }
 }

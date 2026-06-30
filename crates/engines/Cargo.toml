@@ -7,10 +7,23 @@ description = "Engine registry and CPU snapshot for the art-engine"
 [features]
 default = ["png"]
 png = ["dep:image"]
+# Native GPU rendering: pulls in core's native-gpu (EGL + glow) and
+# requires `png` for the PNG writer.
+gpu = ["png", "art-engine-core/native-gpu", "dep:thiserror"]
 
 [dependencies]
 art-engine-core = { path = "../core" }
+thiserror = { version = "2", optional = true }
 art-engine-gray-scott = { path = "../gray-scott" }
+art-engine-physarum = { path = "../physarum" }
+art-engine-mandelbrot = { path = "../mandelbrot" }
+art-engine-particles = { path = "../particles" }
+art-engine-dla = { path = "../dla" }
+art-engine-attractor = { path = "../attractor" }
+art-engine-ising = { path = "../ising" }
+art-engine-differential = { path = "../differential" }
+art-engine-quantum = { path = "../quantum" }
+art-engine-excitable = { path = "../excitable" }
 serde_json = "1"
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 

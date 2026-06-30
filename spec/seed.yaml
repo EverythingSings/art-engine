@@ -1,0 +1,116 @@
+schema: spec-seed/v0.3
+seed_kind: project_overlay
+overlays: engineering/rust_core_cli_iced_spec_seed_v0_3_stable.yaml
+id: PROJECT-ART-ENGINE
+name: art-engine
+version: 0.1.0
+status: draft
+revision_summary:
+  from_version: ~
+  revision: 'first overlay; codifies the project after Phase B shipped'
+  stabilized_on: '2026-05-11'
+  changes:
+    - 'Documented the project name, mission, capabilities list, and target platforms.'
+    - 'Recorded the WSL-only render-path packaging constraint that the foundation spec does not anticipate.'
+    - 'Linked the storyboard + episode crates and their public Backdrop / Foreground / Transition sum types as the authoring surface.'
+
+summary: >
+  Generative art engine in Rust + GLSL ES 3.0, compiled to WASM for the browser and native for
+  headless rendering. Exposes a CLI command interface and a storyboard-driven episode renderer
+  that produces 1080×1920 mp4 shorts from an audio file + a Rusty-Object-Notation (RON)
+  storyboard. Powers "The Examined Machine" YouTube channel.
+
+product_overlay:
+  product_name: art-engine
+  product_codename: ~
+  mission: >
+    Be a reusable Rust engine for generative art with a typed authoring surface (Canvas / Layer /
+    Field / BuiltinShader / Storyboard / Backdrop / Foreground / Transition) that human authors
+    and agents can compose into reproducible, deterministic visual works without depending on
+    cloud services.
+  users:
+    - artists composing generative video
+    - podcast producers producing YouTube Shorts
+    - agents driving the CLI to render episodes from transcribed audio
+    - developers extending the shader / primitive library
+  stakeholders:
+    - the channel @TheExaminedMachine on YouTube
+    - the engineering workspace's foundation seed (this overlay specialises it)
+  domain_summary: >
+    The product is the rendering engine and its authoring vocabulary. Canvas + Layer + Field +
+    palette is the core data model. BuiltinShader is the closed set of GLSL fragment shaders.
+    Storyboard / Backdrop / Foreground / Transition is the per-episode authoring surface that
+    composes those primitives into a video. The episode CLI is the agent-facing automation
+    entrypoint.
+  initial_capabilities:
+    - CAP-RENDER-EPISODE
+    - CAP-PLAN-EPISODE       # validate-and-print, draft
+    - CAP-RENDER-ENGINE      # existing `art-engine-cli render`, draft
+    - CAP-RENDER-SEQUENCE    # existing `art-engine-cli render-sequence`, draft
+    - CAP-COMPOSE            # existing `art-engine-cli compose`, draft
+    - CAP-LIST-ENGINES       # existing `art-engine-cli list`, draft
+  non_goals:
+    - real-time desktop editor or playback engine
+    - networked sync, multi-user collaboration, or cloud rendering
+    - GUI authoring (RON file is the authoring surface; no Iced adapter exists or is planned for v1)
+    - audio synthesis (audio is an input we mux, not produce)
+    - automatic LLM-driven scene composition (deliberately deferred per the project plan)
+  target_platforms:
+    - Linux x86_64 (native render path: requires libEGL + libGLESv2)
+    - WSL Ubuntu on Windows (validated; Mesa software EGL works)
+    - Browser WebGL2 (WASM path; built via wasm-pack, does not produce mp4)
+  distribution_model: CLI tool + WASM library
+  data_sensitivity: low
+  minimum_supported_rust_version: 1.78
+  packaging_targets:
+    - native binary for x86_64-unknown-linux-gnu (art-engine-cli, art-engine-episode)
+    - wasm32-unknown-unknown wasm package (browser library only; no episode rendering)
+  risk_profile:
+    data_loss_impact: low
+    credential_posture: none
+    network_posture: offline-first
+    telemetry_posture: none
+
+source_influences:
+  - name: rust_core_cli_iced_spec_seed_v0_3_stable
+    lessons:
+      - 'Spec is source of truth (LAW-001) — every behavior change should update a capability contract.'
+      - 'Rust core owns the product engine (LAW-002) — Canvas/Layer/Field/BuiltinShader stay in art-engine-core.'
+      - 'Typed boundaries (LAW-005) — Result<_, String> replaced with thiserror enums in art-engine-episode (2026-05-11).'
+      - 'Agent-friendly CLI (LAW-006) — episode CLI uses spec exit codes; JSON output remains a TODO.'
+  - name: examined-machine
+    lessons:
+      - 'A storyboard.ron is the authoring surface. Episode renders are reproducible from (audio + storyboard + features.json).'
+      - 'Foreground primitives (Header, Sigil, KaraokeCaptions, PullQuote, TitleCard, EndCard, ScenePips) belong to the design system, not to individual episodes.'
+
+architecture_notes:
+  workspace_layout_overlay:
+    rationale: >
+      The foundation seed expects an xtask crate. art-engine uses a bash `xtask.sh` script that
+      runs the same validation gates (fmt + clippy + test + doc + wasm). This is allowed under
+      overlay_policy as a project specialisation, documented here.
+    departures:
+      - xtask.sh is a shell wrapper rather than an xtask Rust crate
+      - deny.toml is not yet present (queued in spec_review.md)
+      - dist-workspace.toml is not yet present (cargo-dist is not in use)
+  crates:
+    core: art-engine-core — Canvas/Layer/Field/Palette/BuiltinShader, pure data + GLSL strings.
+    engines: art-engine-engines — engine registry + snapshot/gpu_snapshot writers.
+    storyboard: art-engine-storyboard — Storyboard, Scene, Backdrop, Foreground, Transition data + RON serde + scheduler. Pure data; no GL dep.
+    episode: art-engine-episode — CLI binary that loads a storyboard + features + audio and produces an mp4 via Pipeline. Service-and-interface conflated in this crate (queued in spec_review.md for split).
+    cli: art-engine-cli — primary CLI for engine-driven renders (gray-scott, physarum, etc).
+    wasm: art-engine-wasm — browser WebGL2 binding.
+    engine-crates: gray-scott, physarum, particles, attractor, mandelbrot, rose, microbe, quantum, ising, dla, differential, all `impl Engine`.
+
+current_known_drift:
+  description: 'Captured in `examined-machine/out/spec_review.md` (2026-05-11). Resolved items deleted; open items remain.'
+  open_items:
+    - 'LAW-003: art-engine-episode conflates service + interface. Split into a library function and a thin bin.'
+    - 'LAW-006: `art-engine-episode render` has no machine-readable progress (e.g. stderr ndjson). Deferred — render is long-running and current usage is interactive.'
+    - 'LAW-011 mostly closed: ADR-001 + doctor command landed. Release packaging (distributable binaries) still TBD.'
+    - 'LAW-014: deny.toml codifies the license policy, but `cargo deny check` is not yet wired into xtask.sh check (cargo-deny binary may not be installed locally).'
+    - 'Capability contracts: 1 of 7 initial capabilities still unwritten (render-sequence). render-episode + plan-episode + doctor + list-engines + compose + render-engine landed.'
+
+contact:
+  owner: '@TheExaminedMachine'
+  upstream_seed: ../rust_core_cli_iced_spec_seed_v0_3_stable.yaml

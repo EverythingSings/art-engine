@@ -1,0 +1,238 @@
+id: CAP-COMPOSE
+name: Compose Two Engines
+status: draft
+version: 0.1.0
+stability: provisional
+description: >
+  Step two `Engine` implementations in lockstep, where engine A's
+  output field becomes the influence input for engine B. The final
+  image is engine B's field rendered through the chosen palette.
+  Simplest form of cross-engine coupling — for richer chains, future
+  work could add a JSON DSL (referenced as TODO in the CLI source).
+rationale: >
+  Many of the show's most interesting visuals come from combining
+  primitives (a Voronoi pattern influencing reaction-diffusion, a
+  particle field deforming a flow). `compose` exposes that pattern
+  for power users and agents to experiment with without writing Rust.
+
+actors:
+  - cli
+  - agent
+
+inputs:
+  schema_name: ComposeRequest
+  fields:
+    - name: engine_a
+      type: string
+      required: true
+      description: 'Name of the influencer engine (see `list-engines`).'
+    - name: engine_b
+      type: string
+      required: true
+      description: >
+        Name of the influenced engine. B receives A.field() via
+        `Engine::set_influence` each step.
+    - name: width
+      type: usize
+      required: false
+      default: 720
+      description: 'Canvas width in pixels (1..=8192).'
+    - name: height
+      type: usize
+      required: false
+      default: 720
+      description: 'Canvas height in pixels (1..=8192).'
+    - name: steps
+      type: usize
+      required: false
+      default: 1000
+      description: 'Total simulation steps. Both engines step this many times. Max 1_000_000.'
+    - name: seed
+      type: u64
+      required: false
+      default: 42
+      description: 'PRNG seed passed to both engines.'
+    - name: palette
+      type: string
+      required: false
+      default: amber
+      description: 'Palette name from `list-engines.palettes`.'
+    - name: output
+      type: Path
+      required: false
+      default: compose.png
+      description: 'PNG output path. Parent directory must exist.'
+    - name: params_a
+      type: JsonObject
+      required: false
+      default: '{}'
+      description: 'Engine A parameters. JSON object whose schema is engine-specific.'
+    - name: params_b
+      type: JsonObject
+      required: false
+      default: '{}'
+      description: 'Engine B parameters.'
+    - name: postfx
+      type: bool
+      required: false
+      default: false
+      description: 'Apply CRT post-processing (scanlines + vignette + grain) to the output PNG.'
+  validation_rules:
+    - 'width and height must be 1..=8192'
+    - 'steps must be 0..=1_000_000'
+    - 'engine_a and engine_b must each resolve via EngineKind::from_name'
+    - 'palette must resolve via Palette::from_name'
+    - 'params_a and params_b must parse as JSON objects'
+
+outputs:
+  schema_name: ComposeReport
+  schema_version: 0  # ← like list-engines, no schema_version in current JSON
+  fields:
+    - name: engine_a
+      type: string
+    - name: engine_b
+      type: string
+    - name: width
+      type: usize
+    - name: height
+      type: usize
+    - name: steps
+      type: usize
+    - name: seed
+      type: u64
+    - name: output
+      type: Path
+    - name: postfx
+      type: bool
+
+  formats:
+    human_readable:
+      contract: |
+        Single line on stderr:
+          composed <engine_a> -> <engine_b> (<W>x<H>, <N> steps) -> <output>
+        The PNG itself is the command's real output, on disk.
+    json:
+      contract: |
+        When `--json` is set on the global CLI, the ComposeReport is
+        emitted on stdout as one pretty-printed JSON object. The PNG
+        write is still the meaningful side effect; the JSON document
+        confirms the parameters that produced it.
+
+errors:
+  closed_set:
+    - code: Input
+      category: validation_error
+      recoverable: true
+      exit_code: 3
+      remediation: >
+        Inspect the `error` field. Common causes: unknown engine /
+        palette name, params not a JSON object, dimensions out of
+        range, steps too large.
+    - code: Engine
+      category: integration_error
+      recoverable: false
+      exit_code: 1
+      remediation: >
+        One of the engines failed at construction or during step().
+        Inspect the chained error for the engine's typed failure mode.
+    - code: Io
+      category: io_error
+      recoverable: false
+      exit_code: 1
+      remediation: 'Confirm the output path is writable and the parent dir exists.'
+
+authority:
+  requires_filesystem: true
+  requires_network: false
+  requires_credentials: false
+  requires_process_execution: false
+  requires_destructive_write: true   # overwrites output PNG without prompt
+  requires_telemetry: false
+  permission_behavior: declare
+  authority_types:
+    - filesystem_write
+  notes: >
+    Writes one PNG to the path given. No subprocess execution. No GPU
+    by default (CPU palette + PostFx path); the existing CLI does not
+    expose `--gpu` for `compose` because cross-engine influence is not
+    yet wired through the GPU pipeline.
+
+lifecycle:
+  long_running: true       # large step counts can take ~minutes on large canvases
+  owner_scope: command
+  states:
+    - created
+    - engines_initialised
+    - stepping
+    - rendering
+    - completed
+    - failed
+  cancellation: none
+  cleanup_required: false
+  cleanup_behavior: none
+  error_behavior: typed error
+
+interfaces:
+  cli:
+    exposed: true
+    command: >
+      art-engine compose <engine_a> <engine_b> [-W <W>] [-H <H>]
+        [--steps <N>] [--seed <S>] [--palette <name>]
+        [--output <path>] [--params-a <json>] [--params-b <json>]
+        [--postfx] [--json]
+    json_output_required: false   # --json is the global flag, not required for compose
+    stdin_supported: false
+    stdout_supported: true        # JSON report (when --json) or nothing
+    exit_codes:
+      - code: 0
+        meaning: success
+      - code: 2
+        meaning: clap parser usage error
+      - code: 3
+        meaning: validation failure (Input error)
+      - code: 1
+        meaning: engine or I/O error
+    stdout_contract: 'JSON ComposeReport when --json is set; otherwise empty (the PNG is the result).'
+    stderr_contract: 'One human-readable summary line on success; structured error on failure.'
+  desktop:
+    exposed: false
+  api:
+    exposed: false
+
+observability:
+  events: []
+  metrics:
+    - steps_completed
+    - render_seconds
+  logs: []
+  secrets_redacted: true
+
+acceptance_criteria:
+  - 'compose with two registered engines produces a PNG at the output path'
+  - 'compose with an unknown engine name exits 3 with an Input error'
+  - 'compose with malformed --params-a JSON exits 3'
+  - 'compose with a 0-dimension canvas exits 3 (validation_rules.width/height)'
+  - 'A.field() is set as B.set_influence() before each B.step() call'
+
+required_tests:
+  - 'Unit: existing CLI tests cover argument parsing and error mapping'
+  - 'Integration: not yet wired — would render a 64x64 compose to a temp PNG and assert non-empty output'
+  - 'CLI JSON snapshot when --json lands a schema_version: not yet wired'
+
+compatibility:
+  machine_output_schema: 'ComposeReport (unversioned)'
+  breaking_change_requires: ADR or capability version bump
+  surfaces:
+    - 'Command shape: positional engine_a + engine_b, named flags'
+    - 'Default values (-W 720, -H 720, --steps 1000, --seed 42, --palette amber, --output compose.png)'
+    - 'Engine A → B influence direction (A influences B; not symmetric)'
+    - 'CLI exit codes (0/1/2/3)'
+  open_drift:
+    - >
+      JSON ComposeReport has no `schema_version` field. Same issue as
+      list-engines — queued for the next CLI iteration.
+    - >
+      The CLI source carries a `--chain` TODO comment for a JSON file
+      describing richer multi-engine chains. Not implemented; would
+      supersede `compose` if it lands. Tracked as future work in this
+      capability rather than a separate ADR.
